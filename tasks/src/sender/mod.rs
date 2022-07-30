@@ -60,7 +60,7 @@ impl KafkaSenderTask {
         // self.send_stat(payload.len()).await;
         // Ok(())
 
-        match self.kafka_producer.send(record, Timeout::After(Duration::new(0, 0))).await {
+        match self.kafka_producer.send(record, Timeout::Never).await {
             Ok(_) => {
                 self.send_stat(payload.len()).await;
                 Ok(())
