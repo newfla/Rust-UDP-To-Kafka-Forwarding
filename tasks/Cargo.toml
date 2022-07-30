@@ -1,0 +1,12 @@
+[package]
+name = "tasks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+utilities = {path = "../utilities"}
+
+rand = "0.8"
+async-trait = "0.1.56"
+tokio = { version = "1.20.0", features = ["full"] }
+rdkafka = { version = "0.28", features = ["cmake-build"] }

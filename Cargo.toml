@@ -1,0 +1,10 @@
+[package]
+name = "udp_to_kafka_forwarding"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+utilities = {path = "utilities"}
+tasks = {path = "tasks"}
