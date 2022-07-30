@@ -1,4 +1,4 @@
-# Tokio-To-kafka
+# Rust-UDP-To-Kafka-Forwarding
 
 A simple UDP async server based on [Tokio framework](https://https://tokio.rs) that forwards packets to [Apache Kafka](https://kafka.apache.org/).
 
