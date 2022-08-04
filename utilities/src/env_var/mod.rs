@@ -44,11 +44,17 @@ pub struct EnvVars {
     #[envconfig(from = "KAFKA_QUEUE_BUFFERING_MAX_MS", default="5")]
     pub kafka_queue_buffering_max_ms: u32,
 
+    #[envconfig(from = "KAFKA_QUEUE_BUFFERING_MAX_MESSAGES", default="100000")]
+    pub kafka_queue_buffering_max_messages: u32,
+
     #[envconfig(from = "KAFKA_COMPRESSION_CODEC", default="lz4")]
     pub kafka_compression_codec: String,
 
     #[envconfig(from = "KAFKA_REQUEST_REQUIRED_ACKS", default="1")]
     pub kafka_request_required_acks: u8,
+
+    #[envconfig(from = "KAFKA_RETRIES", default="2147483647")]
+    pub kafka_retries: u32,
 
     #[envconfig(from = "WORKER_THREADS", default="0")]
     pub worker_threads: usize,

@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 utilities = {path = "utilities"}
 tasks = {path = "tasks"}
+
+[profile.release]
+lto = true

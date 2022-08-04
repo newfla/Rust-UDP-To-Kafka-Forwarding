@@ -75,8 +75,10 @@ impl ServerManagerTask {
             .set("bootstrap.servers", vars.kafka_brokers.to_owned())
             .set("batch.num.messages", vars.kafka_batch_num_messages.to_string())
             .set("queue.buffering.max.ms", vars.kafka_queue_buffering_max_ms.to_string())
+            .set("queue.buffering.max.messages", vars.kafka_queue_buffering_max_messages.to_string())
             .set("compression.codec", vars.kafka_compression_codec.to_string())
             .set("request.required.acks", vars.kafka_request_required_acks.to_string())
+            .set("retries", vars.kafka_retries.to_string())
             .to_owned()
     }
 
@@ -142,7 +144,7 @@ impl Task for ServerManagerTask {
         let (tx_shutdown, mut rx_shutdown) = broadcast::channel::<()>(20);
         
         //Communication channel between receiver and dispatcher tasks
-        let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(1000);
+        let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(50000);
 
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
