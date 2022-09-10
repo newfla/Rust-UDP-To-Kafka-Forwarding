@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 utilities = {path = "../utilities"}
 
-rand = "0.8"
-async-trait = "0.1.56"
-tokio = { version = "1.20.0", features = ["full"] }
+rand = "0.8.5"
+async-trait = "0.1.57"
+tokio = { version = "1.21.0", features = ["full"] }
 rdkafka = { version = "0.28", features = ["cmake-build"] }
