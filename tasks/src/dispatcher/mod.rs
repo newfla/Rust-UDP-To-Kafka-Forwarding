@@ -3,7 +3,7 @@ use rdkafka::producer::FutureProducer;
 use tokio::{sync::{broadcast, mpsc::{UnboundedSender, Receiver}}, select, spawn};
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, ShouldGoOn, PartitionStrategy, statistics::StatisticIncoming, sender::KafkaSenderTask};
+use crate::{Task, DataPacket, ShouldGoOn, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka_exp};
 
 pub struct DispatcherTask {
     stats_tx: UnboundedSender<StatisticIncoming>,
@@ -25,14 +25,12 @@ impl DispatcherTask {
         if !self.should_go_on.should_go_on((&packet,&partition)) {
             return; 
         }
-        let packet = (packet,partition);
+
         let stats_tx = self.stats_tx.clone();
         let producer = self.kafka_producer.clone();
         let topic = self.output_topic.clone();
         spawn(async move {
-            if let Err(err) = KafkaSenderTask::new(stats_tx, packet,producer,topic).run().await {
-                error!("Send failed {}",err);
-            } 
+            send_to_kafka_exp(packet, partition, producer, stats_tx, topic).await
         });
     }
 }

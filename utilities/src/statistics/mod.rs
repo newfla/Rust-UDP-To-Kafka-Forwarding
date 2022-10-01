@@ -118,6 +118,73 @@ impl Stats for StatsHolder {
     }        
 }
 
+#[derive(Clone)]
+pub struct SimpleStatsHolder {
+    period: Duration,
+    stats_vec: Vec<StatElement>
+}
+
+impl Default for SimpleStatsHolder {
+    fn default() -> Self {
+        SimpleStatsHolder { period: Duration::new(10,0), stats_vec: Vec::default() }
+    }   
+}
+
+impl SimpleStatsHolder {
+    pub fn new(period: Duration) -> Self {
+        SimpleStatsHolder { period, stats_vec: Vec::default() }
+    }
+}
+
+impl Stats for SimpleStatsHolder {
+    fn add_stat(&mut self, _addr: SocketAddr, recv_time: Instant, send_time:Instant, size: usize){
+
+        let latency = send_time.duration_since(recv_time);
+
+        self.stats_vec.push(StatElement{latency,size});
+
+    }
+
+    fn reset(&mut self) {
+        self.stats_vec.clear();
+    }
+
+    fn calculate(&self) -> Option<StatSummary> {
+        if self.stats_vec.is_empty(){
+            None
+        } else {
+            let latency: Vec<Duration> = self.stats_vec.iter()
+                                                       .map(|elem| {elem.latency})
+                                                       .collect();
+
+            let min_latency = *latency.iter().min().unwrap();
+            let max_latency = *latency.iter().max().unwrap();
+            let average_latency = latency.iter().sum::<Duration>().div_f64(latency.len() as f64);
+
+            let mut bandwidth: f64 = self.stats_vec.iter()
+                                                   .map(|elem| {elem.size})
+                                                   .sum::<usize>() as f64;
+
+            bandwidth/=self.period.as_secs() as f64;
+
+            let packet_processed = latency.len();
+
+            Some( StatSummary { processed_packets: packet_processed, 
+                                bandwidth,
+                                min_latency,
+                                max_latency,
+                                average_latency})
+        }
+    }
+
+    fn calculate_and_reset(&mut self) -> Option<StatSummary> {
+        let res = self.calculate();
+        self.reset();
+        res
+    }        
+}
+
+
 #[derive(Copy,Clone)]
 struct StatElement {
     latency: Duration,
@@ -133,6 +200,43 @@ mod statistics_tests {
     #[test]
     fn test_stats_holder(){
         let mut stats: Box<dyn Stats> = Box::new(StatsHolder::default());
+        let reference = Instant::now();
+
+        stats.add_stat("127.0.0.1:8080".parse().unwrap(), 
+                        reference,
+                        reference.checked_add(Duration::new(2,0)).unwrap(),
+                        128);
+
+        stats.add_stat("127.0.0.1:8080".parse().unwrap(), 
+        reference.checked_add(Duration::new(3,0)).unwrap(),
+        reference.checked_add(Duration::new(4,0)).unwrap(),
+        128);
+
+        stats.add_stat("127.0.0.1:8081".parse().unwrap(), 
+        reference.checked_add(Duration::new(4,0)).unwrap(),
+        reference.checked_add(Duration::new(10,0)).unwrap(),
+        256);
+
+        let stats_oracle = StatSummary {
+            processed_packets: 3,
+            bandwidth:512. / 10.,
+            min_latency: Duration::new(1,0),
+            max_latency: Duration::new(6,0),
+            average_latency: Duration::new(3,0)
+        };
+
+        let stats = stats.calculate_and_reset();
+        assert_ne!(stats,None);
+
+        let stats = stats.unwrap();
+        assert_eq!(stats,stats_oracle);
+
+        println!("{}",stats);
+    }
+
+    #[test]
+    fn test_simple_stats_holder(){
+        let mut stats: Box<dyn Stats> = Box::new(SimpleStatsHolder::default());
         let reference = Instant::now();
 
         stats.add_stat("127.0.0.1:8080".parse().unwrap(), 

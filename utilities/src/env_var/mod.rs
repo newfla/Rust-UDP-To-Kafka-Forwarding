@@ -58,6 +58,9 @@ pub struct EnvVars {
 
     #[envconfig(from = "WORKER_THREADS", default="0")]
     pub worker_threads: usize,
+
+    #[envconfig(from = "CACHE_SIZE", default="50000")]
+    pub cache_size: usize,
 }
 
 impl EnvVars {

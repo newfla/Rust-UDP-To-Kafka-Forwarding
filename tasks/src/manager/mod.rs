@@ -3,7 +3,7 @@ use std::{mem, time::Duration};
 use async_trait::async_trait;
 
 use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
-use tokio::{runtime::{Builder,Runtime}, sync::{broadcast, mpsc::{unbounded_channel, channel}}, select, signal, spawn, join};
+use tokio::{runtime::{Builder,Runtime}, sync::{broadcast, mpsc::{unbounded_channel, channel}}, select, signal, task::JoinSet};
 use utilities::{env_var::{EnvVars, self}, logger, logger::info};
 
 use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, DataPacket, PartitionStrategy, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy, ShouldGoOn};
@@ -144,7 +144,7 @@ impl Task for ServerManagerTask {
         let (tx_shutdown, mut rx_shutdown) = broadcast::channel::<()>(20);
         
         //Communication channel between receiver and dispatcher tasks
-        let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(50000);
+        let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(vars.cache_size);
 
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
@@ -156,7 +156,7 @@ impl Task for ServerManagerTask {
         let func = build_socket_from_env;
 
         //Istantiate tasks
-        let mut stat_task = StatisticsTask::new(vars, tx_shutdown.subscribe(),stats_rx);
+        let mut stat_task = StatisticsTask::new(vars, tx_shutdown.subscribe(),stats_rx, true);
         let mut receiver_task = ReceiverTask::new(
             func, 
             dispatcher_tx,
@@ -174,25 +174,26 @@ impl Task for ServerManagerTask {
             vars.kafka_topic.to_owned());
 
         //Schedule tasks
-        let stat_handler = spawn(async move {stat_task.run().await});
-        let receiver_handler = spawn(async move {receiver_task.run().await});
-        let dispatcher_handler = spawn(async move {dispatcher_task.run().await});
+        let mut set = JoinSet::new();
+        set.spawn(async move {stat_task.run().await});
+        set.spawn(async move {receiver_task.run().await});
+        set.spawn(async move {dispatcher_task.run().await});
       
         //Handle CTRL-C signal
         select! {
             _ = signal::ctrl_c() => {
                     info!("Received CTRL-C signal");
                     Self::propagate_shutdown(&tx_shutdown);
-                    let (_stat,_receiver,_dispatch) = join!(stat_handler, receiver_handler, dispatcher_handler);
-                    
             },
             
             _ = rx_shutdown.recv() => {
                 info!("Shutting manager task");
-                let (_stat,_receiver,_dispatch) = join!(stat_handler, receiver_handler, dispatcher_handler);
             }
         }
+        while (set.join_next().await).is_some() {
 
+        }
+        info!("Bye Bye");
         Ok(())
     }
 }

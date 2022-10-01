@@ -1,9 +1,9 @@
-use std::{time::{Duration,Instant}, sync::{Arc, Mutex}};
+use std::time::{Duration,Instant};
 
 use async_trait::async_trait;
 
-use tokio::{sync::{broadcast, mpsc::UnboundedReceiver}, time::interval, select, task::spawn_blocking};
-use utilities::{logger::*, env_var::EnvVars};
+use tokio::{sync::{broadcast, mpsc::UnboundedReceiver}, time::interval, select};
+use utilities::{logger::*, env_var::EnvVars, statistics::SimpleStatsHolder};
 use utilities::statistics::{Stats, StatsHolder};
 
 use crate::Task;
@@ -23,13 +23,22 @@ pub struct StatisticsTask {
     shutdown_receiver: broadcast::Receiver<()>,
     stats_rx: UnboundedReceiver<StatisticIncoming>,
     timeout: Duration,
-    holder: Arc<Mutex<StatsHolder>> 
+    holder: Box<dyn Stats + Send>
 }
 
 impl StatisticsTask {
-    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: UnboundedReceiver<StatisticIncoming>) -> Self {
-        let holder = Arc::new(Mutex::new(StatsHolder::new( Duration::new(vars.stats_interval,0))));
-        Self { timeout: Duration::new(vars.stats_interval,0), holder,stats_rx, shutdown_receiver}
+    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: UnboundedReceiver<StatisticIncoming>, simple: bool) -> Self {
+        let timeout = Duration::new(vars.stats_interval,0);
+        let holder : Box<dyn Stats + Send>;
+
+        if simple {
+            holder = Box::new(SimpleStatsHolder::new(timeout.clone()))
+        }
+        else {
+            holder = Box::new(StatsHolder::new(timeout.clone()))
+        };
+        
+        Self {timeout, holder,stats_rx, shutdown_receiver}
     }
 }
 
@@ -46,9 +55,7 @@ impl Task for StatisticsTask {
                     return Ok(());
                 }
                 _ = timer.tick() => {
-                    
-                    let holder = Arc::clone(&self.holder);
-                    if let Ok(Some(summary)) = spawn_blocking(move || {holder.lock().unwrap().calculate_and_reset()}).await {
+                    if let Some(summary) = self.holder.calculate_and_reset() {
                         info!("{}",summary);
                     } else {
                         info!("No data in transit in the last {} seconds", self.timeout.as_secs());
@@ -56,7 +63,7 @@ impl Task for StatisticsTask {
                 }
                 stat = self.stats_rx.recv() => {
                     if let Some(msg) = stat {
-                        self.holder.lock().unwrap().add_stat(msg.addr, msg.recv_time, msg.send_time, msg.size);
+                        self.holder.add_stat(msg.addr, msg.recv_time, msg.send_time, msg.size);
                     }
                 }
             }

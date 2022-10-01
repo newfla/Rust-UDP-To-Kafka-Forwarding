@@ -2,7 +2,6 @@ use tasks::{manager::ServerManagerTask, AlwaysShouldGoOn};
 use utilities::{logger::*,logger};
 
 fn main() {
-    
     //Init logger
     logger!();
    

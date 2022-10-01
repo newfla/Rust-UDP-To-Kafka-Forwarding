@@ -12,7 +12,6 @@ pub mod manager;
 
 
 type DataPacket = (Vec<u8>, SocketAddr, Instant);
-type DataPacketPlusPartition = (DataPacket, Option<i32>);
 
 #[async_trait]
 pub trait Task {
