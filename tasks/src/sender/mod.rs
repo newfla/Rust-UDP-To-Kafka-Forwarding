@@ -28,7 +28,7 @@ pub async fn send_to_kafka_exp(packet: DataPacket, partition: Option<i32>, kafka
                 Ok(())
             }
             Err((e, _)) => {
-                error!("Not sended");
+                error!("Not sent");
                 Err(e.to_string())
             }
         }

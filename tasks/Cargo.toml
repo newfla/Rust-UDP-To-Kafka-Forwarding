@@ -7,6 +7,6 @@ edition = "2021"
 utilities = {path = "../utilities"}
 
 rand = "0.8.5"
-async-trait = "0.1.57"
-tokio = { version = "1.21.0", features = ["full"] }
-rdkafka = { version = "0.28", features = ["cmake-build"] }
+async-trait = "0.1.58"
+tokio = { version = "1.21.2", features = ["full"] }
+rdkafka = { version = "0.29", features = ["cmake-build","zstd-pkg-config"] }

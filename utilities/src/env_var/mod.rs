@@ -47,6 +47,9 @@ pub struct EnvVars {
     #[envconfig(from = "KAFKA_QUEUE_BUFFERING_MAX_MESSAGES", default="100000")]
     pub kafka_queue_buffering_max_messages: u32,
 
+    #[envconfig(from = "KAFKA_QUEUE_BUFFERING_MAX_KBYTES", default="1048576")]
+    pub kafka_queue_buffering_max_kbytes: u32,
+
     #[envconfig(from = "KAFKA_COMPRESSION_CODEC", default="lz4")]
     pub kafka_compression_codec: String,
 

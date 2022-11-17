@@ -76,6 +76,7 @@ impl ServerManagerTask {
             .set("batch.num.messages", vars.kafka_batch_num_messages.to_string())
             .set("queue.buffering.max.ms", vars.kafka_queue_buffering_max_ms.to_string())
             .set("queue.buffering.max.messages", vars.kafka_queue_buffering_max_messages.to_string())
+            .set("queue.buffering.max.kbytes", vars.kafka_queue_buffering_max_kbytes.to_string())
             .set("compression.codec", vars.kafka_compression_codec.to_string())
             .set("request.required.acks", vars.kafka_request_required_acks.to_string())
             .set("retries", vars.kafka_retries.to_string())

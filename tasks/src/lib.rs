@@ -67,7 +67,7 @@ impl RoundRobinPartitionStrategy  {
 
 impl PartitionStrategy for RoundRobinPartitionStrategy  {
     fn partition(&mut self, addr: &SocketAddr) -> Option<i32> {
-        let next = self.start_partition + 1 % self.num_partitions;
+        let next = (self.start_partition + 1) % self.num_partitions;
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);
