@@ -1,7 +1,9 @@
-use std::{time::Instant, net::SocketAddr, collections::HashMap};
+use std::{time::Instant, net::SocketAddr};
 use rand::{thread_rng, Rng};
 use async_trait::async_trait;
 use tokio::sync::broadcast;
+use rustc_hash::FxHashMap;
+use ustr::ustr;
 use utilities::logger::{error, debug};
 
 mod statistics;
@@ -26,8 +28,8 @@ pub trait Task {
 }
 
 pub trait PartitionStrategy {
-    fn partition(&mut self, _addr: &SocketAddr) -> Option<i32> {
-        None
+    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>,&'static str) {
+        (None, ustr(&(addr.to_string()+"|auto")).as_str())
     }
 }
 
@@ -46,8 +48,10 @@ impl RandomPartitionStrategy {
 }
 
 impl PartitionStrategy for RandomPartitionStrategy {
-    fn partition(&mut self, _addr: &SocketAddr) -> Option<i32> {
-        Some(thread_rng().gen_range(0..self.num_partitions))
+    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
+        let next = thread_rng().gen_range(0..self.num_partitions) as i32;
+        let key = addr.to_string() +"|"+ &next.to_string();
+        (Some(next),ustr(&key).as_str())
     }
 }
 
@@ -66,18 +70,19 @@ impl RoundRobinPartitionStrategy  {
 }
 
 impl PartitionStrategy for RoundRobinPartitionStrategy  {
-    fn partition(&mut self, addr: &SocketAddr) -> Option<i32> {
+    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str){
         let next = (self.start_partition + 1) % self.num_partitions;
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);
 
-        Some(next)
+        let key = addr.to_string() +"|"+ &next.to_string();
+        (Some(next),ustr(&key).as_str())
     }
 }
 
 pub struct StickyRoundRobinPartitionStrategy {
-    map_partition: HashMap<SocketAddr, i32>,
+    map_partition: FxHashMap<SocketAddr,(Option<i32>,&'static str)>,
     start_partition: i32,
     num_partitions: i32
 }
@@ -85,7 +90,7 @@ pub struct StickyRoundRobinPartitionStrategy {
 impl StickyRoundRobinPartitionStrategy {
     pub fn new(kafka_num_partitions: i32) -> Self {
         Self {
-            map_partition: HashMap::default(),
+            map_partition: FxHashMap::default(),
             start_partition: thread_rng().gen_range(0..kafka_num_partitions),
             num_partitions: kafka_num_partitions
         }
@@ -93,17 +98,19 @@ impl StickyRoundRobinPartitionStrategy {
 }
 
 impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
-    fn partition(&mut self, addr: &SocketAddr) -> Option<i32> {
-        if let Some (x) = self.map_partition.get(addr) {
-            return Some(*x);
+    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
+        if let Some (val) = self.map_partition.get(addr) {
+            return *val;
         }
         let next = (self.start_partition + 1) % self.num_partitions;
-        self.map_partition.insert(*addr, next);
+        let key = addr.to_string() +"|"+ &next.to_string();
+        let val = (Some(next),ustr(&key).as_str());
+        self.map_partition.insert(*addr,val);
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);
 
-        Some(next)
+        val
     }
 }
 

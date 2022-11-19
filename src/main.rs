@@ -1,5 +1,9 @@
 use tasks::{manager::ServerManagerTask, AlwaysShouldGoOn};
 use utilities::{logger::*,logger};
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     //Init logger

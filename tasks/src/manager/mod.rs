@@ -41,12 +41,8 @@ impl ServerManagerTask {
         if let Err(err) = producer {
             return Err(err.to_string());
         }
-
-        if let Err(err)  = partitions_count {
-            return Err(err);
-        }
-
-        self.kafka_num_partitions = partitions_count.unwrap() as i32;
+        
+        self.kafka_num_partitions = partitions_count? as i32;
         
         info!("Founded {} partitions for the topic '{}'!",self.kafka_num_partitions,  self.vars.as_ref().unwrap().kafka_topic.as_str());
         self.producer = producer.ok();

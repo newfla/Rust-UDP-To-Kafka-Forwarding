@@ -29,13 +29,11 @@ pub struct StatisticsTask {
 impl StatisticsTask {
     pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: UnboundedReceiver<StatisticIncoming>, simple: bool) -> Self {
         let timeout = Duration::new(vars.stats_interval,0);
-        let holder : Box<dyn Stats + Send>;
-
-        if simple {
-            holder = Box::new(SimpleStatsHolder::new(timeout.clone()))
+        let holder: Box<dyn Stats + Send> = if simple {
+            Box::new(SimpleStatsHolder::new(timeout))
         }
         else {
-            holder = Box::new(StatsHolder::new(timeout.clone()))
+           Box::new(StatsHolder::new(timeout))
         };
         
         Self {timeout, holder,stats_rx, shutdown_receiver}

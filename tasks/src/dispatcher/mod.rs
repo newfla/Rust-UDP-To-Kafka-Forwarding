@@ -3,7 +3,7 @@ use rdkafka::producer::FutureProducer;
 use tokio::{sync::{broadcast, mpsc::{UnboundedSender, Receiver}}, select, spawn};
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, ShouldGoOn, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka_exp};
+use crate::{Task, DataPacket, ShouldGoOn, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka};
 
 pub struct DispatcherTask {
     stats_tx: UnboundedSender<StatisticIncoming>,
@@ -20,17 +20,15 @@ impl DispatcherTask {
         Self { shutdown_receiver, dispatcher_receiver, stats_tx, should_go_on, partition_strategy, output_topic, kafka_producer}
     }
 
-    async fn dispatch_packet(&mut self, packet: DataPacket) {
+    #[inline(always)]
+    async fn dispatch_packet(&mut self, packet: DataPacket, topic: &'static str, producer: &'static FutureProducer) {
         let partition = self.partition_strategy.partition(&packet.1);
-        if !self.should_go_on.should_go_on((&packet,&partition)) {
+        if !self.should_go_on.should_go_on((&packet,&partition.0)) {
             return; 
         }
-
         let stats_tx = self.stats_tx.clone();
-        let producer = self.kafka_producer.clone();
-        let topic = self.output_topic.clone();
         spawn(async move {
-            send_to_kafka_exp(packet, partition, producer, stats_tx, topic).await
+            send_to_kafka(packet, partition.0, partition.1,producer, stats_tx, topic).await
         });
     }
 }
@@ -38,6 +36,8 @@ impl DispatcherTask {
 #[async_trait]
 impl Task for DispatcherTask {
     async fn run(&mut self) -> Result<(),String> {
+        let topic = Box::leak(self.output_topic.clone().into_boxed_str());
+        let producer = Box::leak(Box::new(self.kafka_producer.clone()));
         loop {
            select! {
                 _ = self.shutdown_receiver.recv() => { 
@@ -47,7 +47,7 @@ impl Task for DispatcherTask {
 
                 data = self.dispatcher_receiver.recv() => {
                     if let Some(pkt) = data  {
-                        DispatcherTask::dispatch_packet(self, pkt).await;
+                        DispatcherTask::dispatch_packet(self, pkt,topic,producer).await;
                     }
                 }
            }
