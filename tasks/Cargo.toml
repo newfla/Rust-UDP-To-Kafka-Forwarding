@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 utilities = {path = "../utilities"}
 
-rand = "0.8.5"
+fastrand = "1.8.0"
 async-trait = "0.1.58"
 rustc-hash = "1.1.0"
 ustr = "0.9.0"

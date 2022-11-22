@@ -1,5 +1,5 @@
 use std::{time::Instant, net::SocketAddr};
-use rand::{thread_rng, Rng};
+use fastrand::{Rng};
 use async_trait::async_trait;
 use tokio::sync::broadcast;
 use rustc_hash::FxHashMap;
@@ -38,18 +38,19 @@ pub struct NonePartitionStrategy {}
 impl PartitionStrategy for NonePartitionStrategy {}
 
 pub struct RandomPartitionStrategy {
+    rng: Rng,
     num_partitions: i32
 }
 
 impl RandomPartitionStrategy {
     pub fn new(kafka_num_partitions: i32) -> Self {
-        Self { num_partitions: kafka_num_partitions }
+        Self { rng: Rng::new(), num_partitions: kafka_num_partitions }
     }
 }
 
 impl PartitionStrategy for RandomPartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
-        let next = thread_rng().gen_range(0..self.num_partitions) as i32;
+        let next = self.rng.i32(0..self.num_partitions);
         let key = addr.to_string() +"|"+ &next.to_string();
         (Some(next),ustr(&key).as_str())
     }
@@ -63,7 +64,7 @@ pub struct RoundRobinPartitionStrategy  {
 impl RoundRobinPartitionStrategy  {
     pub fn new(kafka_num_partitions: i32) -> Self {
         Self { 
-            start_partition: thread_rng().gen_range(0..kafka_num_partitions),
+            start_partition: fastrand::i32(0..kafka_num_partitions),
             num_partitions: kafka_num_partitions
         }
     }
@@ -91,7 +92,7 @@ impl StickyRoundRobinPartitionStrategy {
     pub fn new(kafka_num_partitions: i32) -> Self {
         Self {
             map_partition: FxHashMap::default(),
-            start_partition: thread_rng().gen_range(0..kafka_num_partitions),
+            start_partition: fastrand::i32(0..kafka_num_partitions),
             num_partitions: kafka_num_partitions
         }
     }
