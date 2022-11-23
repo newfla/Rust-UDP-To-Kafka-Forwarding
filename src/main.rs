@@ -1,4 +1,4 @@
-use tasks::{manager::ServerManagerTask, AlwaysShouldGoOn};
+use tasks::manager::ServerManagerTask;
 use utilities::{logger::*,logger};
 use mimalloc::MiMalloc;
 
@@ -9,7 +9,7 @@ fn main() {
     //Init logger
     logger!();
    
-    let mut manager = ServerManagerTask::default().should_go_on_strategy(Box::new(AlwaysShouldGoOn::default()));
+    let mut manager = ServerManagerTask::default();
     match manager.init() {
 
         Err(err) =>error!("Failed to initialize server manager with error: {}", err),

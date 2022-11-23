@@ -7,13 +7,18 @@ use utilities::{logger::*, env_var::EnvVars, statistics::SimpleStatsHolder};
 use utilities::statistics::{Stats, StatsHolder};
 
 use crate::Task;
-pub struct StatisticIncoming {
+
+pub enum StatisticIncoming{
+    DataTransmitted(StatisticData),
+    DataLoss
+}
+pub struct StatisticData {
     addr: std::net::SocketAddr, 
     recv_time: Instant, 
     send_time: Instant, 
     size: usize
 }
-impl StatisticIncoming {
+impl StatisticData {
     pub fn new(addr: std::net::SocketAddr, recv_time: Instant, send_time: Instant, size: usize) -> Self {
         Self { addr, recv_time, send_time, size}
     }
@@ -60,8 +65,12 @@ impl Task for StatisticsTask {
                     }
                 }
                 stat = self.stats_rx.recv() => {
-                    if let Some(msg) = stat {
-                        self.holder.add_stat(msg.addr, msg.recv_time, msg.send_time, msg.size);
+                    if let Some(data) = stat {
+                        match data {
+                            StatisticIncoming::DataTransmitted(msg) => self.holder.add_stat(msg.addr, msg.recv_time, msg.send_time, msg.size),
+                            StatisticIncoming::DataLoss => self.holder.add_loss(),
+                        }
+                        
                     }
                 }
             }

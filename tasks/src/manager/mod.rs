@@ -1,3 +1,5 @@
+use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy};
+
 use std::{mem, time::Duration};
 
 use async_trait::async_trait;
@@ -6,21 +8,16 @@ use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consume
 use tokio::{runtime::{Builder,Runtime}, sync::{broadcast, mpsc::{unbounded_channel, channel}}, select, signal, task::JoinSet};
 use utilities::{env_var::{EnvVars, self}, logger, logger::info};
 
-use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, DataPacket, PartitionStrategy, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy, ShouldGoOn};
+use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, DataPacket, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
 
 #[derive(Default)]
 pub struct ServerManagerTask {
     vars: Option<EnvVars>,
     producer: Option<FutureProducer>,
-    kafka_num_partitions: i32,
-    should_go_on_strategy : Option<Box<dyn ShouldGoOn + Send>>
+    kafka_num_partitions: i32
 }
 
 impl ServerManagerTask {
-    pub fn should_go_on_strategy(mut self, should_go_on_strategy : Box<dyn ShouldGoOn + Send>) -> Self {
-        self.should_go_on_strategy = Some(should_go_on_strategy);
-        self
-    }
 
     pub fn init(&mut self) -> Result<(),String> {
 
@@ -108,15 +105,25 @@ impl ServerManagerTask {
         }
     }
 
-    fn build_partition_strategy(&self) -> Box<dyn PartitionStrategy + Send + 'static>  {
+    fn build_checkpoint_strategy(&self) -> CheckpointStrategies {
+        let vars = self.vars.as_ref().unwrap();
+        info!("Selected Checkpoint Strategy: {}",vars.checkpoint_strategy());
+        
+        match vars.checkpoint_strategy() {
+            env_var::CheckpointStrategy::OpenDoors =>  CheckpointStrategies::OpenDoors(OpenDoorsStrategy::default()),
+            env_var::CheckpointStrategy::ClosedDoors =>  CheckpointStrategies::ClosedDoors(ClosedDoorsStrategy::default()),
+        }
+    }
+
+    fn build_partition_strategy(&self) -> PartitionStrategies {
         let vars = self.vars.as_ref().unwrap();
         info!("Selected Partion Strategy: {}",vars.kafka_partition_strategy());
         
         match vars.kafka_partition_strategy() {
-            env_var::PartitionStrategy::None =>  Box::new(NonePartitionStrategy::default()),
-            env_var::PartitionStrategy::Random => Box::new(RandomPartitionStrategy::new(self.kafka_num_partitions)),
-            env_var::PartitionStrategy::RoundRobin => Box::new(RoundRobinPartitionStrategy::new(self.kafka_num_partitions)),
-            env_var::PartitionStrategy::StickyRoundRobin => Box::new(StickyRoundRobinPartitionStrategy::new(self.kafka_num_partitions)),
+            env_var::PartitionStrategy::None =>  NonePartition(NonePartitionStrategy::default()),
+            env_var::PartitionStrategy::Random => RandomPartition(RandomPartitionStrategy::new(self.kafka_num_partitions)),
+            env_var::PartitionStrategy::RoundRobin => RoundRobinPartition(RoundRobinPartitionStrategy::new(self.kafka_num_partitions)),
+            env_var::PartitionStrategy::StickyRoundRobin => StickyRoundRobinPartition(StickyRoundRobinPartitionStrategy::new(self.kafka_num_partitions)),
         }
     }
 
@@ -131,10 +138,6 @@ impl Task for ServerManagerTask {
             return Err("kafka producer is not initializated".to_string());
         }
 
-        if self.should_go_on_strategy.is_none()  {
-            return Err("ShouldGoOn Startegy Must be specified".to_string());
-        }
-
         let producer = mem::take(&mut self.producer).unwrap();
 
         //Define shutdown channel
@@ -145,6 +148,7 @@ impl Task for ServerManagerTask {
 
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
+        let checkpoint_strategy = self.build_checkpoint_strategy();
 
         //Define channel to send statistics update
         let (stats_tx,stats_rx) = unbounded_channel();
@@ -165,7 +169,7 @@ impl Task for ServerManagerTask {
             tx_shutdown.subscribe(),
             dispatcher_rx,
             stats_tx,
-            mem::take(&mut self.should_go_on_strategy).unwrap(),
+            checkpoint_strategy,
             partition_strategy,
             producer,
             vars.kafka_topic.to_owned());

@@ -2,9 +2,8 @@ use std::{time::Instant, net::SocketAddr};
 
 use rdkafka::{producer::{FutureProducer, FutureRecord}, util::Timeout};
 use tokio::{sync::{mpsc:: UnboundedSender}};
-use utilities::logger::error;
 
-use crate::{statistics::StatisticIncoming, DataPacket};
+use crate::{statistics::{StatisticIncoming::{*, self}, StatisticData}, DataPacket};
 
 #[inline(always)]
 pub async fn send_to_kafka(packet: DataPacket, partition: Option<i32>, key: &'static str, kafka_producer: &'static FutureProducer,
@@ -19,7 +18,7 @@ pub async fn send_to_kafka(packet: DataPacket, partition: Option<i32>, key: &'st
                 Ok(())
             }
             Err((e, _)) => {
-                error!("Not sent");
+                let _ = stats_tx.send(DataLoss);
                 Err(e.to_string())
             }
         }
@@ -27,11 +26,11 @@ pub async fn send_to_kafka(packet: DataPacket, partition: Option<i32>, key: &'st
 
 #[inline(always)]
 async fn send_stat(stats_tx: UnboundedSender<StatisticIncoming>,len: usize, addr: SocketAddr, recv_time: Instant) {
-    let stat = StatisticIncoming::new(
+    let stat = StatisticData::new(
         addr, 
         recv_time, 
         Instant::now(), 
         len);
 
-        let _ = stats_tx.send(stat);
+        let _ = stats_tx.send(DataTransmitted(stat));
 }

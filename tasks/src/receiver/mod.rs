@@ -45,7 +45,7 @@ impl Task for ReceiverTask {
 
         let socket = socket.unwrap();
         let mut buf = vec![0u8; self.buffer_size];
-
+        //let mut buf = BytesMut::with_capacity(self.buffer_size);
         info!("Receiver task correctly started");
 
         //Handle incoming UDP packets 

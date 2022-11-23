@@ -4,6 +4,7 @@ use std::{cmp,collections::HashMap, net::SocketAddr, time::{Duration, Instant}, 
 use byte_unit::Byte;
 
 pub trait Stats {
+    fn add_loss(&mut self);
     fn add_stat(&mut self, addr: SocketAddr, recv_time: Instant, send_time:Instant, size: usize);
     fn calculate_and_reset(&mut self) -> Option<StatSummary>;
     fn calculate(&self) -> Option<StatSummary>;
@@ -17,7 +18,8 @@ pub struct StatSummary {
     bandwidth: f64,
     min_latency: Duration,
     max_latency: Duration,
-    average_latency: Duration
+    average_latency: Duration,
+    loss_packets: usize
 }
 
 impl Add for StatSummary {
@@ -30,6 +32,7 @@ impl Add for StatSummary {
             min_latency: cmp::min(self.min_latency, rhs.min_latency),
             max_latency: cmp::max(self.max_latency, rhs.max_latency),
             average_latency: (self.average_latency + rhs.average_latency).div_f64(2.),
+            loss_packets: self.loss_packets + rhs.loss_packets,
         }
     }
 }
@@ -44,7 +47,8 @@ impl Display for StatSummary {
         let bandwidth = Byte::from_bytes(bandwidth as u128).get_appropriate_unit(false).to_string();
         let bandwidth =bandwidth[0..bandwidth.len()-1].to_string();
 
-        writeln!(f,"Packets processed: {}",self.processed_packets).and(
+        writeln!(f,"\nPackets processed: {}",self.processed_packets).and(
+            writeln!(f,"Loss packets: {}",self.loss_packets)).and(
             writeln!(f,"Bandwidth: {}bit/s", bandwidth)).and(
             writeln!(f,"Latency: <min: {}, max: {}, average: {}> ms",min,max,average)
         )
@@ -54,17 +58,18 @@ impl Display for StatSummary {
 #[derive(Clone)]
 pub struct StatsHolder {
     period: Duration,
-    stats_map: HashMap<SocketAddr,Vec<StatElement>>
+    stats_map: HashMap<SocketAddr,Vec<StatElement>>,
+    loss_packets: usize
 }
 
 impl Default for StatsHolder {
     fn default() -> Self {
-        StatsHolder { period: Duration::new(10,0), stats_map: HashMap::default() }
+        StatsHolder { period: Duration::new(10,0), stats_map: HashMap::default(), loss_packets: usize::default() }
     }   
 }
 impl StatsHolder {
     pub fn new(period: Duration) -> Self {
-        StatsHolder { period, stats_map: HashMap::default() }
+        StatsHolder { period, stats_map: HashMap::default(), loss_packets: usize::default() }
     }
 }
 
@@ -79,6 +84,7 @@ impl Stats for StatsHolder {
 
     fn reset(&mut self) {
         self.stats_map.clear();
+        self.loss_packets = usize::default();
     }
 
     fn calculate(&self) -> Option<StatSummary> {
@@ -107,7 +113,8 @@ impl Stats for StatsHolder {
                                 bandwidth,
                                 min_latency,
                                 max_latency,
-                                average_latency})
+                                average_latency,
+                                loss_packets: self.loss_packets})
         }
     }
 
@@ -115,24 +122,29 @@ impl Stats for StatsHolder {
         let res = self.calculate();
         self.reset();
         res
+    }
+
+    fn add_loss(&mut self) {
+        self.loss_packets+=1;
     }        
 }
 
 #[derive(Clone)]
 pub struct SimpleStatsHolder {
     period: Duration,
-    stats_vec: Vec<StatElement>
+    stats_vec: Vec<StatElement>,
+    loss_packets: usize
 }
 
 impl Default for SimpleStatsHolder {
     fn default() -> Self {
-        SimpleStatsHolder { period: Duration::new(10,0), stats_vec: Vec::default() }
+        SimpleStatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), loss_packets: usize::default()}
     }   
 }
 
 impl SimpleStatsHolder {
     pub fn new(period: Duration) -> Self {
-        SimpleStatsHolder { period, stats_vec: Vec::default() }
+        SimpleStatsHolder { period, stats_vec: Vec::default(), loss_packets: usize::default() }
     }
 }
 
@@ -147,6 +159,7 @@ impl Stats for SimpleStatsHolder {
 
     fn reset(&mut self) {
         self.stats_vec.clear();
+        self.loss_packets = usize::default();
     }
 
     fn calculate(&self) -> Option<StatSummary> {
@@ -173,7 +186,8 @@ impl Stats for SimpleStatsHolder {
                                 bandwidth,
                                 min_latency,
                                 max_latency,
-                                average_latency})
+                                average_latency,
+                                loss_packets: self.loss_packets})
         }
     }
 
@@ -181,7 +195,11 @@ impl Stats for SimpleStatsHolder {
         let res = self.calculate();
         self.reset();
         res
-    }        
+    }
+    
+    fn add_loss(&mut self) {
+        self.loss_packets+=1;
+    }  
 }
 
 

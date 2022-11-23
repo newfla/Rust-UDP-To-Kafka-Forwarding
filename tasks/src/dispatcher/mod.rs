@@ -3,27 +3,27 @@ use rdkafka::producer::FutureProducer;
 use tokio::{sync::{broadcast, mpsc::{UnboundedSender, Receiver}}, select, spawn};
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, ShouldGoOn, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka};
+use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka, PartitionStrategies, CheckpointStrategies};
 
 pub struct DispatcherTask {
     stats_tx: UnboundedSender<StatisticIncoming>,
     shutdown_receiver: broadcast::Receiver<()>,
     dispatcher_receiver: Receiver<DataPacket>,
-    should_go_on: Box<dyn ShouldGoOn + Send>,
-    partition_strategy: Box<dyn PartitionStrategy + Send>,
+    checkpoint_strategy: CheckpointStrategies,
+    partition_strategy: PartitionStrategies,
     kafka_producer: FutureProducer,
     output_topic: String
 }
 
 impl DispatcherTask {
-    pub fn new(shutdown_receiver: broadcast::Receiver<()>, dispatcher_receiver: Receiver<DataPacket>, stats_tx: UnboundedSender<StatisticIncoming>, should_go_on: Box<dyn ShouldGoOn + Send>, partition_strategy: Box<dyn PartitionStrategy + Send>, kafka_producer: FutureProducer, output_topic: String)-> Self {
-        Self { shutdown_receiver, dispatcher_receiver, stats_tx, should_go_on, partition_strategy, output_topic, kafka_producer}
+    pub fn new(shutdown_receiver: broadcast::Receiver<()>, dispatcher_receiver: Receiver<DataPacket>, stats_tx: UnboundedSender<StatisticIncoming>, checkpoint_strategy: CheckpointStrategies, partition_strategy: PartitionStrategies, kafka_producer: FutureProducer, output_topic: String)-> Self {
+        Self { shutdown_receiver, dispatcher_receiver, stats_tx, checkpoint_strategy, partition_strategy, output_topic, kafka_producer}
     }
 
     #[inline(always)]
     async fn dispatch_packet(&mut self, packet: DataPacket, topic: &'static str, producer: &'static FutureProducer) {
         let partition = self.partition_strategy.partition(&packet.1);
-        if !self.should_go_on.should_go_on((&packet,&partition.0)) {
+        if !self.checkpoint_strategy.check((&packet,&partition.0)) {
             return; 
         }
         let stats_tx = self.stats_tx.clone();

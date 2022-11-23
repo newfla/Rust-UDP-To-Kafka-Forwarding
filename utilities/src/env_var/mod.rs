@@ -15,6 +15,15 @@ pub enum PartitionStrategy {
     #[strum(serialize="STICKY_ROUND_ROBIN")]
     StickyRoundRobin
 }
+
+#[derive(EnumString,Display)]
+pub enum CheckpointStrategy {
+    #[strum(serialize="OPEN_DOORS")]
+    OpenDoors,
+    #[strum(serialize="CLOSED_DOORS")]
+    ClosedDoors,
+}
+
 #[derive(Envconfig, Debug, Clone)]
 pub struct EnvVars {
     #[envconfig(from = "SERVER_IP", default="127.0.0.1")]
@@ -37,6 +46,9 @@ pub struct EnvVars {
 
     #[envconfig(from = "KAFKA_PARTITION_STRATEGY", default="NONE")]
     kafka_partition_strategy: String,
+
+    #[envconfig(from = "CHECKPOINT_STRATEGY", default="OPEN_DOORS")]
+    checkpoint_strategy: String,
 
     #[envconfig(from = "KAFKA_BATCH_NUM_MESSAGES", default="10000")]
     pub kafka_batch_num_messages: u32,
@@ -69,6 +81,10 @@ pub struct EnvVars {
 impl EnvVars {
     pub fn kafka_partition_strategy(&self) -> PartitionStrategy {
         PartitionStrategy::from_str(&self.kafka_partition_strategy).unwrap()
+    }
+
+    pub fn checkpoint_strategy(&self) -> CheckpointStrategy {
+        CheckpointStrategy::from_str(&self.checkpoint_strategy).unwrap()
     }
 }
 

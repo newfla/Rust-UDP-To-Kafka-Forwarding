@@ -115,22 +115,54 @@ impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
     }
 }
 
-pub trait ShouldGoOn {
-    fn should_go_on(&self, _data: (&DataPacket,&Option<i32>)) -> bool {
+pub enum PartitionStrategies {
+    NonePartition(NonePartitionStrategy),
+    RandomPartition(RandomPartitionStrategy),
+    RoundRobinPartition(RoundRobinPartitionStrategy),
+    StickyRoundRobinPartition(StickyRoundRobinPartitionStrategy)
+}
+
+impl PartitionStrategy for PartitionStrategies {
+    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
+        match self {
+            PartitionStrategies::NonePartition(strategy) => strategy.partition(addr),
+            PartitionStrategies::RandomPartition(strategy) => strategy.partition(addr),
+            PartitionStrategies::RoundRobinPartition(strategy) => strategy.partition(addr),
+            PartitionStrategies::StickyRoundRobinPartition(strategy) => strategy.partition(addr)
+        }
+    }
+}
+
+pub trait CheckpointStrategy {
+    fn check(&self, _data: (&DataPacket,&Option<i32>)) -> bool {
         true
     }
 }
 
 #[derive(Default)]
-pub struct AlwaysShouldGoOn {}
+pub struct OpenDoorsStrategy {}
 
-impl ShouldGoOn for AlwaysShouldGoOn {}
+impl CheckpointStrategy for OpenDoorsStrategy {}
 
 #[derive(Default)]
-pub struct NeverShouldGoOn {}
+pub struct ClosedDoorsStrategy {}
 
-impl ShouldGoOn for NeverShouldGoOn {
-    fn should_go_on(&self, _data: (&DataPacket,&Option<i32>)) -> bool {
+impl CheckpointStrategy for ClosedDoorsStrategy {
+    fn check(&self, _data: (&DataPacket,&Option<i32>)) -> bool {
         false
+    }
+}
+
+pub enum CheckpointStrategies {
+    OpenDoors(OpenDoorsStrategy),
+    ClosedDoors(ClosedDoorsStrategy),
+}
+
+impl CheckpointStrategy for CheckpointStrategies {
+    fn check(&self, data: (&DataPacket,&Option<i32>)) -> bool {
+        match self {
+            CheckpointStrategies::OpenDoors(strategy) => strategy.check(data),
+            CheckpointStrategies::ClosedDoors(strategy) => strategy.check(data),
+        }
     }
 }
