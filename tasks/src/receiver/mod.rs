@@ -2,7 +2,8 @@ use std::{net::SocketAddr, time::Instant};
 
 use async_trait::async_trait;
 
-use tokio::{net::UdpSocket, sync::{mpsc::Sender, broadcast}, select};
+use kanal::AsyncSender;
+use tokio::{net::UdpSocket, sync::broadcast, select};
 use utilities::{logger::*, env_var::EnvVars};
 
 use crate::{Task, DataPacket};
@@ -16,13 +17,13 @@ pub fn build_socket_from_env(vars: &EnvVars) -> SocketAddr {
 pub struct ReceiverTask {
     addr: SocketAddr,
     buffer_size: usize,
-    dispatcher_sender: Sender<DataPacket>,
+    dispatcher_sender: AsyncSender<DataPacket>,
     shutdown_receiver: broadcast::Receiver<()>,
     shutdown_sender: broadcast::Sender<()>
 }
 
 impl ReceiverTask {
-    pub fn new<F>(func: F, dispatcher: Sender<DataPacket>, shutdown_receiver: broadcast::Receiver<()>, 
+    pub fn new<F>(func: F, dispatcher: AsyncSender<DataPacket>, shutdown_receiver: broadcast::Receiver<()>, 
         shutdown_sender: broadcast::Sender<()>, vars: &EnvVars) -> Self 
     where
     F:Fn(&EnvVars) -> SocketAddr, {

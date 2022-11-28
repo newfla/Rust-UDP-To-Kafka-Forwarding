@@ -2,7 +2,8 @@ use std::time::{Duration,Instant};
 
 use async_trait::async_trait;
 
-use tokio::{sync::{broadcast, mpsc::UnboundedReceiver}, time::interval, select};
+use kanal::AsyncReceiver;
+use tokio::{sync::broadcast, time::interval, select};
 use utilities::{logger::*, env_var::EnvVars, statistics::SimpleStatsHolder};
 use utilities::statistics::{Stats, StatsHolder};
 
@@ -26,13 +27,13 @@ impl StatisticData {
 
 pub struct StatisticsTask {
     shutdown_receiver: broadcast::Receiver<()>,
-    stats_rx: UnboundedReceiver<StatisticIncoming>,
+    stats_rx: AsyncReceiver<StatisticIncoming>,
     timeout: Duration,
     holder: Box<dyn Stats + Send>
 }
 
 impl StatisticsTask {
-    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: UnboundedReceiver<StatisticIncoming>, simple: bool) -> Self {
+    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: AsyncReceiver<StatisticIncoming>, simple: bool) -> Self {
         let timeout = Duration::new(vars.stats_interval,0);
         let holder: Box<dyn Stats + Send> = if simple {
             Box::new(SimpleStatsHolder::new(timeout))
@@ -65,7 +66,7 @@ impl Task for StatisticsTask {
                     }
                 }
                 stat = self.stats_rx.recv() => {
-                    if let Some(data) = stat {
+                    if let Ok(data) = stat {
                         match data {
                             StatisticIncoming::DataTransmitted(msg) => self.holder.add_stat(msg.addr, msg.recv_time, msg.send_time, msg.size),
                             StatisticIncoming::DataLoss => self.holder.add_loss(),

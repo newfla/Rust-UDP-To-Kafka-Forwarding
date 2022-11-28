@@ -4,11 +4,12 @@ use std::{mem, time::Duration};
 
 use async_trait::async_trait;
 
+use kanal::{unbounded_async, bounded_async};
 use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
-use tokio::{runtime::{Builder,Runtime}, sync::{broadcast, mpsc::{unbounded_channel, channel}}, select, signal, task::JoinSet};
+use tokio::{runtime::{Builder,Runtime}, sync::broadcast, select, signal, task::JoinSet};
 use utilities::{env_var::{EnvVars, self}, logger, logger::info};
 
-use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, DataPacket, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
+use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
 
 #[derive(Default)]
 pub struct ServerManagerTask {
@@ -144,14 +145,14 @@ impl Task for ServerManagerTask {
         let (tx_shutdown, mut rx_shutdown) = broadcast::channel::<()>(20);
         
         //Communication channel between receiver and dispatcher tasks
-        let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(vars.cache_size);
-
+        //let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(vars.cache_size);
+        let (dispatcher_tx,dispatcher_rx) = bounded_async(vars.cache_size);
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
         let checkpoint_strategy = self.build_checkpoint_strategy();
 
         //Define channel to send statistics update
-        let (stats_tx,stats_rx) = unbounded_channel();
+        let (stats_tx,stats_rx) = unbounded_async();
 
         //Istantiate closure to build socketaddr for the receiver 
         let func = build_socket_from_env;
@@ -188,7 +189,7 @@ impl Task for ServerManagerTask {
             },
             
             _ = rx_shutdown.recv() => {
-                info!("Shutting manager task");
+                info!("Shutting down manager task");
             }
         }
         while (set.join_next().await).is_some() {

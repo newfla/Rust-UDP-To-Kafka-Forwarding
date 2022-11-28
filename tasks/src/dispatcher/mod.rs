@@ -1,14 +1,15 @@
 use async_trait::async_trait;
+use kanal::{AsyncReceiver, AsyncSender};
 use rdkafka::producer::FutureProducer;
-use tokio::{sync::{broadcast, mpsc::{UnboundedSender, Receiver}}, select, spawn};
+use tokio::{sync::broadcast, select, spawn};
 use utilities::logger::*;
 
 use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka, PartitionStrategies, CheckpointStrategies};
 
 pub struct DispatcherTask {
-    stats_tx: UnboundedSender<StatisticIncoming>,
+    stats_tx: AsyncSender<StatisticIncoming>,
     shutdown_receiver: broadcast::Receiver<()>,
-    dispatcher_receiver: Receiver<DataPacket>,
+    dispatcher_receiver: AsyncReceiver<DataPacket>,
     checkpoint_strategy: CheckpointStrategies,
     partition_strategy: PartitionStrategies,
     kafka_producer: FutureProducer,
@@ -16,7 +17,7 @@ pub struct DispatcherTask {
 }
 
 impl DispatcherTask {
-    pub fn new(shutdown_receiver: broadcast::Receiver<()>, dispatcher_receiver: Receiver<DataPacket>, stats_tx: UnboundedSender<StatisticIncoming>, checkpoint_strategy: CheckpointStrategies, partition_strategy: PartitionStrategies, kafka_producer: FutureProducer, output_topic: String)-> Self {
+    pub fn new(shutdown_receiver: broadcast::Receiver<()>, dispatcher_receiver: AsyncReceiver<DataPacket>, stats_tx: AsyncSender<StatisticIncoming>, checkpoint_strategy: CheckpointStrategies, partition_strategy: PartitionStrategies, kafka_producer: FutureProducer, output_topic: String)-> Self {
         Self { shutdown_receiver, dispatcher_receiver, stats_tx, checkpoint_strategy, partition_strategy, output_topic, kafka_producer}
     }
 
@@ -27,6 +28,7 @@ impl DispatcherTask {
             return; 
         }
         let stats_tx = self.stats_tx.clone();
+        debug!("Dispatching packet {}",partition.1);
         spawn(async move {
             send_to_kafka(packet, partition.0, partition.1,producer, stats_tx, topic).await
         });
@@ -46,7 +48,7 @@ impl Task for DispatcherTask {
                 }
 
                 data = self.dispatcher_receiver.recv() => {
-                    if let Some(pkt) = data  {
+                    if let Ok(pkt) = data  {
                         DispatcherTask::dispatch_packet(self, pkt,topic,producer).await;
                     }
                 }
