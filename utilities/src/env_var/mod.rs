@@ -24,6 +24,14 @@ pub enum CheckpointStrategy {
     ClosedDoors,
 }
 
+#[derive(EnumString,Display)]
+pub enum OrderStrategy {
+    #[strum(serialize="NOT_ORDERED")]
+    NotOrdered,
+    #[strum(serialize="ORDERED_BY_ADDRESS")]
+    OrderedByAddress,
+}
+
 #[derive(Envconfig, Debug, Clone)]
 pub struct EnvVars {
     #[envconfig(from = "SERVER_IP", default="127.0.0.1")]
@@ -35,20 +43,29 @@ pub struct EnvVars {
     #[envconfig(from = "BUFFER_SIZE", default="1024")]
     pub buffer_size: usize,
 
+    #[envconfig(from = "STATS_INTERVAL", default="10")]
+    pub stats_interval: u64,
+
+    #[envconfig(from = "WORKER_THREADS", default="0")]
+    pub worker_threads: usize,
+
+    #[envconfig(from = "CACHE_SIZE", default="50000")]
+    pub cache_size: usize,
+
     #[envconfig(from = "KAFKA_BROKERS")]
     pub kafka_brokers: String,
 
     #[envconfig(from = "KAFKA_TOPIC")]
     pub kafka_topic: String,
 
-    #[envconfig(from = "STATS_INTERVAL", default="10")]
-    pub stats_interval: u64,
-
     #[envconfig(from = "KAFKA_PARTITION_STRATEGY", default="NONE")]
     kafka_partition_strategy: String,
 
     #[envconfig(from = "CHECKPOINT_STRATEGY", default="OPEN_DOORS")]
     checkpoint_strategy: String,
+
+    #[envconfig(from = "ORDER_STRATEGY", default="NOT_ORDERED")]
+    order_strategy: String,
 
     #[envconfig(from = "KAFKA_BATCH_NUM_MESSAGES", default="10000")]
     pub kafka_batch_num_messages: u32,
@@ -71,11 +88,6 @@ pub struct EnvVars {
     #[envconfig(from = "KAFKA_RETRIES", default="2147483647")]
     pub kafka_retries: u32,
 
-    #[envconfig(from = "WORKER_THREADS", default="0")]
-    pub worker_threads: usize,
-
-    #[envconfig(from = "CACHE_SIZE", default="50000")]
-    pub cache_size: usize,
 }
 
 impl EnvVars {
@@ -85,6 +97,10 @@ impl EnvVars {
 
     pub fn checkpoint_strategy(&self) -> CheckpointStrategy {
         CheckpointStrategy::from_str(&self.checkpoint_strategy).unwrap()
+    }
+
+    pub fn order_strategy(&self) -> OrderStrategy {
+        OrderStrategy::from_str(&self.order_strategy).unwrap()
     }
 }
 

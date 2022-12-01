@@ -1,4 +1,4 @@
-use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy};
+use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}};
 
 use std::{mem, time::Duration};
 
@@ -6,7 +6,7 @@ use async_trait::async_trait;
 
 use kanal::{unbounded_async, bounded_async};
 use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
-use tokio::{runtime::{Builder,Runtime}, sync::broadcast, select, signal, task::JoinSet};
+use tokio::{runtime::Builder, sync::broadcast, select, signal, task::JoinSet};
 use utilities::{env_var::{EnvVars, self}, logger, logger::info};
 
 use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
@@ -50,13 +50,12 @@ impl ServerManagerTask {
     
     pub fn start(&mut self) ->Result<(),String> {
         let worker_threads = self.vars.as_ref().unwrap().worker_threads;
-        let mut rt = Runtime::new();
+        let mut rt_builder = Builder::new_multi_thread();
         if worker_threads > 0 {
-            rt = Builder::new_multi_thread()
-                .worker_threads(worker_threads)
-                .enable_all()
-                .build();
-        } 
+            rt_builder.worker_threads(worker_threads);
+        }
+        let rt = rt_builder.enable_all().build();
+
         match rt {
             Ok(rt) =>  rt.block_on(self.run()),
             Err(_) =>  Err("Failed to initialize Tokio runtime".to_string())
@@ -128,6 +127,16 @@ impl ServerManagerTask {
         }
     }
 
+    fn build_order_strategy(&self) -> PacketsOrderStrategies {
+        let vars = self.vars.as_ref().unwrap();
+        info!("Selected Packets Order Strategy: {}",vars.order_strategy());
+        
+        match vars.order_strategy() {
+            env_var::OrderStrategy::NotOrdered =>  PacketsOrderStrategies::NotSorted(PacketsNotSortedStrategy::default()),
+            env_var::OrderStrategy::OrderedByAddress =>  PacketsOrderStrategies::SortedByAddress(PacketsSortedByAddressStrategy::default()),
+        }
+    }
+
 }
 
 #[async_trait]
@@ -145,12 +154,12 @@ impl Task for ServerManagerTask {
         let (tx_shutdown, mut rx_shutdown) = broadcast::channel::<()>(20);
         
         //Communication channel between receiver and dispatcher tasks
-        //let (dispatcher_tx, dispatcher_rx) = channel::<DataPacket>(vars.cache_size);
         let (dispatcher_tx,dispatcher_rx) = bounded_async(vars.cache_size);
+
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
         let checkpoint_strategy = self.build_checkpoint_strategy();
-
+        let order_strategy = self.build_order_strategy();
         //Define channel to send statistics update
         let (stats_tx,stats_rx) = unbounded_async();
 
@@ -172,6 +181,7 @@ impl Task for ServerManagerTask {
             stats_tx,
             checkpoint_strategy,
             partition_strategy,
+            order_strategy,
             producer,
             vars.kafka_topic.to_owned());
 

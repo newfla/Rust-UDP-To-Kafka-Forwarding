@@ -240,7 +240,8 @@ mod statistics_tests {
             bandwidth:512. / 10.,
             min_latency: Duration::new(1,0),
             max_latency: Duration::new(6,0),
-            average_latency: Duration::new(3,0)
+            average_latency: Duration::new(3,0),
+            loss_packets: 0
         };
 
         let stats = stats.calculate_and_reset();
@@ -277,7 +278,8 @@ mod statistics_tests {
             bandwidth:512. / 10.,
             min_latency: Duration::new(1,0),
             max_latency: Duration::new(6,0),
-            average_latency: Duration::new(3,0)
+            average_latency: Duration::new(3,0),
+            loss_packets: 0
         };
 
         let stats = stats.calculate_and_reset();

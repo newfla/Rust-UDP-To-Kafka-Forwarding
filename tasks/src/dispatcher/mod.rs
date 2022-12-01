@@ -1,24 +1,43 @@
 use async_trait::async_trait;
 use kanal::{AsyncReceiver, AsyncSender};
 use rdkafka::producer::FutureProducer;
-use tokio::{sync::broadcast, select, spawn};
+use tokio::{sync::broadcast, select};
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, sender::send_to_kafka, PartitionStrategies, CheckpointStrategies};
+use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, sender::{PacketsOrderStrategies, PacketsOrderStrategy}};
 
 pub struct DispatcherTask {
-    stats_tx: AsyncSender<StatisticIncoming>,
     shutdown_receiver: broadcast::Receiver<()>,
     dispatcher_receiver: AsyncReceiver<DataPacket>,
+    stats_tx: AsyncSender<StatisticIncoming>, 
     checkpoint_strategy: CheckpointStrategies,
     partition_strategy: PartitionStrategies,
+    order_strategy: PacketsOrderStrategies,
     kafka_producer: FutureProducer,
     output_topic: String
 }
 
 impl DispatcherTask {
-    pub fn new(shutdown_receiver: broadcast::Receiver<()>, dispatcher_receiver: AsyncReceiver<DataPacket>, stats_tx: AsyncSender<StatisticIncoming>, checkpoint_strategy: CheckpointStrategies, partition_strategy: PartitionStrategies, kafka_producer: FutureProducer, output_topic: String)-> Self {
-        Self { shutdown_receiver, dispatcher_receiver, stats_tx, checkpoint_strategy, partition_strategy, output_topic, kafka_producer}
+    pub fn new(
+        shutdown_receiver: broadcast::Receiver<()>, 
+        dispatcher_receiver: AsyncReceiver<DataPacket>, 
+        stats_tx: AsyncSender<StatisticIncoming>, 
+        checkpoint_strategy: CheckpointStrategies,
+        partition_strategy: PartitionStrategies,
+        order_strategy: PacketsOrderStrategies,
+        kafka_producer: FutureProducer, 
+        output_topic: String,
+        )-> Self {
+            Self { 
+                shutdown_receiver,
+                dispatcher_receiver, 
+                stats_tx,
+                checkpoint_strategy, 
+                partition_strategy,
+                order_strategy,
+                kafka_producer,
+                output_topic
+            }
     }
 
     #[inline(always)]
@@ -27,11 +46,8 @@ impl DispatcherTask {
         if !self.checkpoint_strategy.check((&packet,&partition.0)) {
             return; 
         }
-        let stats_tx = self.stats_tx.clone();
         debug!("Dispatching packet {}",partition.1);
-        spawn(async move {
-            send_to_kafka(packet, partition.0, partition.1,producer, stats_tx, topic).await
-        });
+        self.order_strategy.send_to_kafka(packet, partition.0, partition.1, producer, self.stats_tx.clone(), topic).await;
     }
 }
 
@@ -49,7 +65,7 @@ impl Task for DispatcherTask {
 
                 data = self.dispatcher_receiver.recv() => {
                     if let Ok(pkt) = data  {
-                        DispatcherTask::dispatch_packet(self, pkt,topic,producer).await;
+                        DispatcherTask::dispatch_packet(self, pkt, topic, producer).await;
                     }
                 }
            }
