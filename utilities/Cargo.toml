@@ -9,3 +9,4 @@ simple_logger = "2.3.0"
 envconfig = "0.10.0"
 strum = { version = "0.24.1", features = ["derive"]}
 byte-unit = "4.0.14"
+derive-new = "0.5"

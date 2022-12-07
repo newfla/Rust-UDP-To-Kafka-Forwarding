@@ -2,6 +2,7 @@ use std::time::{Duration,Instant};
 
 use async_trait::async_trait;
 
+use derive_new::new;
 use kanal::AsyncReceiver;
 use tokio::{sync::broadcast, time::interval, select};
 use utilities::{logger::*, env_var::EnvVars, statistics::SimpleStatsHolder};
@@ -13,16 +14,12 @@ pub enum StatisticIncoming{
     DataTransmitted(StatisticData),
     DataLoss
 }
+#[derive(new)]
 pub struct StatisticData {
     addr: std::net::SocketAddr, 
     recv_time: Instant, 
     send_time: Instant, 
     size: usize
-}
-impl StatisticData {
-    pub fn new(addr: std::net::SocketAddr, recv_time: Instant, send_time: Instant, size: usize) -> Self {
-        Self { addr, recv_time, send_time, size}
-    }
 }
 
 pub struct StatisticsTask {

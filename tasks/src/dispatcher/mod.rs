@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use derive_new::new;
 use kanal::{AsyncReceiver, AsyncSender};
 use rdkafka::producer::FutureProducer;
 use tokio::{sync::broadcast, select};
@@ -6,6 +7,7 @@ use utilities::logger::*;
 
 use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, sender::{PacketsOrderStrategies, PacketsOrderStrategy}};
 
+#[derive(new)]
 pub struct DispatcherTask {
     shutdown_receiver: broadcast::Receiver<()>,
     dispatcher_receiver: AsyncReceiver<DataPacket>,
@@ -18,27 +20,6 @@ pub struct DispatcherTask {
 }
 
 impl DispatcherTask {
-    pub fn new(
-        shutdown_receiver: broadcast::Receiver<()>, 
-        dispatcher_receiver: AsyncReceiver<DataPacket>, 
-        stats_tx: AsyncSender<StatisticIncoming>, 
-        checkpoint_strategy: CheckpointStrategies,
-        partition_strategy: PartitionStrategies,
-        order_strategy: PacketsOrderStrategies,
-        kafka_producer: FutureProducer, 
-        output_topic: String,
-        )-> Self {
-            Self { 
-                shutdown_receiver,
-                dispatcher_receiver, 
-                stats_tx,
-                checkpoint_strategy, 
-                partition_strategy,
-                order_strategy,
-                kafka_producer,
-                output_topic
-            }
-    }
 
     #[inline(always)]
     async fn dispatch_packet(&mut self, packet: DataPacket, topic: &'static str, producer: &'static FutureProducer) {

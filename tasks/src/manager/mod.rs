@@ -1,4 +1,4 @@
-use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}};
+use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}, FlipCoinStrategy};
 
 use std::{mem, time::Duration};
 
@@ -112,6 +112,7 @@ impl ServerManagerTask {
         match vars.checkpoint_strategy() {
             env_var::CheckpointStrategy::OpenDoors =>  CheckpointStrategies::OpenDoors(OpenDoorsStrategy::default()),
             env_var::CheckpointStrategy::ClosedDoors =>  CheckpointStrategies::ClosedDoors(ClosedDoorsStrategy::default()),
+            env_var::CheckpointStrategy::FlipCoin =>  CheckpointStrategies::FlipCoin(FlipCoinStrategy::default()),
         }
     }
 

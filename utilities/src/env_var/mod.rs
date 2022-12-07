@@ -22,6 +22,8 @@ pub enum CheckpointStrategy {
     OpenDoors,
     #[strum(serialize="CLOSED_DOORS")]
     ClosedDoors,
+    #[strum(serialize="FLIP_COIN")]
+    FlipCoin,
 }
 
 #[derive(EnumString,Display)]
@@ -85,7 +87,7 @@ pub struct EnvVars {
     #[envconfig(from = "KAFKA_REQUEST_REQUIRED_ACKS", default="1")]
     pub kafka_request_required_acks: u8,
 
-    #[envconfig(from = "KAFKA_RETRIES", default="2147483647")]
+    #[envconfig(from = "KAFKA_RETRIES", default="1")]
     pub kafka_retries: u32,
 
 }

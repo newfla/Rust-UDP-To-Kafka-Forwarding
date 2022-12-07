@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use tokio::sync::broadcast;
 use rustc_hash::FxHashMap;
 use ustr::ustr;
+use derive_new::new;
 use utilities::logger::{error, debug};
 
 mod statistics;
@@ -37,15 +38,11 @@ pub trait PartitionStrategy {
 pub struct NonePartitionStrategy {}
 impl PartitionStrategy for NonePartitionStrategy {}
 
+#[derive(new)]
 pub struct RandomPartitionStrategy {
+    #[new(default)]
     rng: Rng,
     num_partitions: i32
-}
-
-impl RandomPartitionStrategy {
-    pub fn new(kafka_num_partitions: i32) -> Self {
-        Self { rng: Rng::new(), num_partitions: kafka_num_partitions }
-    }
 }
 
 impl PartitionStrategy for RandomPartitionStrategy {
@@ -56,19 +53,13 @@ impl PartitionStrategy for RandomPartitionStrategy {
     }
 }
 
+#[derive(new)]
 pub struct RoundRobinPartitionStrategy  {
+    #[new(value = "fastrand::i32(0..num_partitions)")]
     start_partition: i32,
     num_partitions: i32
 }
 
-impl RoundRobinPartitionStrategy  {
-    pub fn new(kafka_num_partitions: i32) -> Self {
-        Self { 
-            start_partition: fastrand::i32(0..kafka_num_partitions),
-            num_partitions: kafka_num_partitions
-        }
-    }
-}
 
 impl PartitionStrategy for RoundRobinPartitionStrategy  {
     fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str){
@@ -82,20 +73,13 @@ impl PartitionStrategy for RoundRobinPartitionStrategy  {
     }
 }
 
+#[derive(new)]
 pub struct StickyRoundRobinPartitionStrategy {
+    #[new(default)]
     map_partition: FxHashMap<SocketAddr,(Option<i32>,&'static str)>,
+    #[new(value = "fastrand::i32(0..num_partitions)")]
     start_partition: i32,
     num_partitions: i32
-}
-
-impl StickyRoundRobinPartitionStrategy {
-    pub fn new(kafka_num_partitions: i32) -> Self {
-        Self {
-            map_partition: FxHashMap::default(),
-            start_partition: fastrand::i32(0..kafka_num_partitions),
-            num_partitions: kafka_num_partitions
-        }
-    }
 }
 
 impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
@@ -153,9 +137,19 @@ impl CheckpointStrategy for ClosedDoorsStrategy {
     }
 }
 
+#[derive(Default)]
+pub struct FlipCoinStrategy {}
+
+impl CheckpointStrategy for FlipCoinStrategy {
+    fn check(&self, _data: (&DataPacket,&Option<i32>)) -> bool {
+        fastrand::bool()
+    }
+}
+
 pub enum CheckpointStrategies {
     OpenDoors(OpenDoorsStrategy),
     ClosedDoors(ClosedDoorsStrategy),
+    FlipCoin(FlipCoinStrategy),
 }
 
 impl CheckpointStrategy for CheckpointStrategies {
@@ -163,6 +157,7 @@ impl CheckpointStrategy for CheckpointStrategies {
         match self {
             CheckpointStrategies::OpenDoors(strategy) => strategy.check(data),
             CheckpointStrategies::ClosedDoors(strategy) => strategy.check(data),
+            CheckpointStrategies::FlipCoin(strategy) => strategy.check(data)
         }
     }
 }

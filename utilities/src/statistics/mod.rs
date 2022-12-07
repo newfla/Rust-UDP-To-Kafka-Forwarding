@@ -2,6 +2,7 @@
 use std::{cmp,collections::HashMap, net::SocketAddr, time::{Duration, Instant}, fmt::Display, ops::Add};
 
 use byte_unit::Byte;
+use derive_new::new;
 
 pub trait Stats {
     fn add_loss(&mut self);
@@ -55,10 +56,12 @@ impl Display for StatSummary {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,new)]
 pub struct StatsHolder {
     period: Duration,
+    #[new(default)]
     stats_map: HashMap<SocketAddr,Vec<StatElement>>,
+    #[new(default)]
     loss_packets: usize
 }
 
@@ -66,11 +69,6 @@ impl Default for StatsHolder {
     fn default() -> Self {
         StatsHolder { period: Duration::new(10,0), stats_map: HashMap::default(), loss_packets: usize::default() }
     }   
-}
-impl StatsHolder {
-    pub fn new(period: Duration) -> Self {
-        StatsHolder { period, stats_map: HashMap::default(), loss_packets: usize::default() }
-    }
 }
 
 impl Stats for StatsHolder {
@@ -129,10 +127,12 @@ impl Stats for StatsHolder {
     }        
 }
 
-#[derive(Clone)]
+#[derive(Clone,new)]
 pub struct SimpleStatsHolder {
     period: Duration,
+    #[new(default)]
     stats_vec: Vec<StatElement>,
+    #[new(default)]
     loss_packets: usize
 }
 
@@ -142,11 +142,6 @@ impl Default for SimpleStatsHolder {
     }   
 }
 
-impl SimpleStatsHolder {
-    pub fn new(period: Duration) -> Self {
-        SimpleStatsHolder { period, stats_vec: Vec::default(), loss_packets: usize::default() }
-    }
-}
 
 impl Stats for SimpleStatsHolder {
     fn add_stat(&mut self, _addr: SocketAddr, recv_time: Instant, send_time:Instant, size: usize){
