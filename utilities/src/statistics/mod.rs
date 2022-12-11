@@ -1,12 +1,12 @@
 
-use std::{cmp,collections::HashMap, net::SocketAddr, time::{Duration, Instant}, fmt::Display, ops::Add};
+use std::{cmp, time::{Duration, Instant}, fmt::Display, ops::Add};
 
 use byte_unit::Byte;
 use derive_new::new;
 
 pub trait Stats {
     fn add_loss(&mut self);
-    fn add_stat(&mut self, addr: SocketAddr, recv_time: Instant, send_time:Instant, size: usize);
+    fn add_stat(&mut self, recv_time: Instant, send_time:Instant, size: usize);
     fn calculate_and_reset(&mut self) -> Option<StatSummary>;
     fn calculate(&self) -> Option<StatSummary>;
     fn reset(&mut self);
@@ -60,91 +60,20 @@ impl Display for StatSummary {
 pub struct StatsHolder {
     period: Duration,
     #[new(default)]
-    stats_map: HashMap<SocketAddr,Vec<StatElement>>,
+    stats_vec: Vec<StatElement>,
     #[new(default)]
     loss_packets: usize
 }
 
 impl Default for StatsHolder {
     fn default() -> Self {
-        StatsHolder { period: Duration::new(10,0), stats_map: HashMap::default(), loss_packets: usize::default() }
+        StatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), loss_packets: usize::default()}
     }   
 }
+
 
 impl Stats for StatsHolder {
-    fn add_stat(&mut self, addr: SocketAddr, recv_time: Instant, send_time:Instant, size: usize){
-
-        let latency = send_time.duration_since(recv_time);
-
-        self.stats_map.entry(addr).or_default().push(StatElement{latency,size});
-
-    }
-
-    fn reset(&mut self) {
-        self.stats_map.clear();
-        self.loss_packets = usize::default();
-    }
-
-    fn calculate(&self) -> Option<StatSummary> {
-        if self.stats_map.is_empty(){
-            None
-        } else {
-            let latency: Vec<Duration> = self.stats_map.values()
-                                                       .flatten()
-                                                       .map(|elem| {elem.latency})
-                                                       .collect();
-
-            let min_latency = *latency.iter().min().unwrap();
-            let max_latency = *latency.iter().max().unwrap();
-            let average_latency = latency.iter().sum::<Duration>().div_f64(latency.len() as f64);
-
-            let mut bandwidth: f64 = self.stats_map.values()
-                                                   .flatten()
-                                                   .map(|elem| {elem.size})
-                                                   .sum::<usize>() as f64;
-
-            bandwidth/=self.period.as_secs() as f64;
-
-            let packet_processed = latency.len();
-
-            Some( StatSummary { processed_packets: packet_processed, 
-                                bandwidth,
-                                min_latency,
-                                max_latency,
-                                average_latency,
-                                loss_packets: self.loss_packets})
-        }
-    }
-
-    fn calculate_and_reset(&mut self) -> Option<StatSummary> {
-        let res = self.calculate();
-        self.reset();
-        res
-    }
-
-    fn add_loss(&mut self) {
-        self.loss_packets+=1;
-    }        
-}
-
-#[derive(Clone,new)]
-pub struct SimpleStatsHolder {
-    period: Duration,
-    #[new(default)]
-    stats_vec: Vec<StatElement>,
-    #[new(default)]
-    loss_packets: usize
-}
-
-impl Default for SimpleStatsHolder {
-    fn default() -> Self {
-        SimpleStatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), loss_packets: usize::default()}
-    }   
-}
-
-
-impl Stats for SimpleStatsHolder {
-    fn add_stat(&mut self, _addr: SocketAddr, recv_time: Instant, send_time:Instant, size: usize){
+    fn add_stat(&mut self, recv_time: Instant, send_time:Instant, size: usize){
 
         let latency = send_time.duration_since(recv_time);
 
@@ -211,62 +140,24 @@ mod statistics_tests {
     use crate::statistics::*;
 
     #[test]
-    fn test_stats_holder(){
+    fn test_simple_stats_holder(){
         let mut stats: Box<dyn Stats> = Box::new(StatsHolder::default());
         let reference = Instant::now();
 
-        stats.add_stat("127.0.0.1:8080".parse().unwrap(), 
-                        reference,
-                        reference.checked_add(Duration::new(2,0)).unwrap(),
-                        128);
+        stats.add_stat(
+            reference,
+            reference.checked_add(Duration::new(2,0)).unwrap(),
+            128);
 
-        stats.add_stat("127.0.0.1:8080".parse().unwrap(), 
-        reference.checked_add(Duration::new(3,0)).unwrap(),
-        reference.checked_add(Duration::new(4,0)).unwrap(),
-        128);
+        stats.add_stat(
+            reference.checked_add(Duration::new(3,0)).unwrap(),
+            reference.checked_add(Duration::new(4,0)).unwrap(),
+            128);
 
-        stats.add_stat("127.0.0.1:8081".parse().unwrap(), 
-        reference.checked_add(Duration::new(4,0)).unwrap(),
-        reference.checked_add(Duration::new(10,0)).unwrap(),
-        256);
-
-        let stats_oracle = StatSummary {
-            processed_packets: 3,
-            bandwidth:512. / 10.,
-            min_latency: Duration::new(1,0),
-            max_latency: Duration::new(6,0),
-            average_latency: Duration::new(3,0),
-            loss_packets: 0
-        };
-
-        let stats = stats.calculate_and_reset();
-        assert_ne!(stats,None);
-
-        let stats = stats.unwrap();
-        assert_eq!(stats,stats_oracle);
-
-        println!("{}",stats);
-    }
-
-    #[test]
-    fn test_simple_stats_holder(){
-        let mut stats: Box<dyn Stats> = Box::new(SimpleStatsHolder::default());
-        let reference = Instant::now();
-
-        stats.add_stat("127.0.0.1:8080".parse().unwrap(), 
-                        reference,
-                        reference.checked_add(Duration::new(2,0)).unwrap(),
-                        128);
-
-        stats.add_stat("127.0.0.1:8080".parse().unwrap(), 
-        reference.checked_add(Duration::new(3,0)).unwrap(),
-        reference.checked_add(Duration::new(4,0)).unwrap(),
-        128);
-
-        stats.add_stat("127.0.0.1:8081".parse().unwrap(), 
-        reference.checked_add(Duration::new(4,0)).unwrap(),
-        reference.checked_add(Duration::new(10,0)).unwrap(),
-        256);
+        stats.add_stat(
+            reference.checked_add(Duration::new(4,0)).unwrap(),
+            reference.checked_add(Duration::new(10,0)).unwrap(),
+            256);
 
         let stats_oracle = StatSummary {
             processed_packets: 3,

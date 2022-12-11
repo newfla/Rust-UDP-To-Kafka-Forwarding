@@ -12,4 +12,5 @@ mimalloc = { version = "*", default-features = false }
 
 [profile.release]
 lto = true
+strip = true
 panic = "abort"

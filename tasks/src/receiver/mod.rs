@@ -65,9 +65,12 @@ impl Task for ReceiverTask {
                         },
                         Ok((len, addr)) => {
                             debug!("Received {} bytes from {}", len, addr);
-                            if self.dispatcher_sender.send((buf[..len].to_vec(), addr, Instant::now())).await.is_err() {
-                                error!("Failed to send data to dispatcher_task");
-                                Self::propagate_shutdown(&self.shutdown_sender);
+                            //Not really unsafe :)
+                            unsafe{
+                                if self.dispatcher_sender.send((buf.get_unchecked(..len).to_vec(), addr, Instant::now())).await.is_err() {
+                                    error!("Failed to send data to dispatcher");
+                                    Self::propagate_shutdown(&self.shutdown_sender);
+                                }
                             }
                         },
                     }

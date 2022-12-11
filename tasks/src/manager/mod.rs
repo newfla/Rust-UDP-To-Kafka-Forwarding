@@ -42,7 +42,7 @@ impl ServerManagerTask {
         
         self.kafka_num_partitions = partitions_count? as i32;
         
-        info!("Founded {} partitions for the topic '{}'!",self.kafka_num_partitions,  self.vars.as_ref().unwrap().kafka_topic.as_str());
+        info!("Founded {} partitions for the topic '{}'",self.kafka_num_partitions,  self.vars.as_ref().unwrap().kafka_topic.as_str());
         self.producer = producer.ok();
         
         Ok(())
@@ -168,7 +168,7 @@ impl Task for ServerManagerTask {
         let func = build_socket_from_env;
 
         //Istantiate tasks
-        let mut stat_task = StatisticsTask::new(vars, tx_shutdown.subscribe(),stats_rx, true);
+        let mut stat_task = StatisticsTask::new(vars, tx_shutdown.subscribe(),stats_rx);
         let mut receiver_task = ReceiverTask::new(
             func, 
             dispatcher_tx,

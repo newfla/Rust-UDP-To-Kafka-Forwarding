@@ -13,14 +13,18 @@ use crate::{statistics::{StatisticIncoming::{*, self}, StatisticData}, DataPacke
 pub trait PacketsOrderStrategy {
 
     #[inline(always)]
-    async fn send_stat(stats_tx: AsyncSender<StatisticIncoming>,len: usize, addr: SocketAddr, recv_time: Instant) {
+    async fn send_stat(stats_tx: AsyncSender<StatisticIncoming>,len: usize, recv_time: Instant) {
         let stat = StatisticData::new(
-            addr, 
             recv_time, 
             Instant::now(), 
             len);
 
             let _ = stats_tx.send(DataTransmitted(stat)).await;
+    }
+    
+    #[inline(always)]
+    async fn send_data_loss(stats_tx: AsyncSender<StatisticIncoming>) {
+        let _ = stats_tx.send(DataLoss).await;
     }
 
     async fn send_to_kafka(
@@ -51,17 +55,17 @@ impl PacketsOrderStrategy for PacketsNotSortedStrategy {
         stats_tx: AsyncSender<StatisticIncoming>,
         output_topic: &'static str) {
             spawn(async move {
-                let (payload, addr, recv_time) = packet;
+                let (payload, _, recv_time) = packet;
                 let mut record = FutureRecord::to(output_topic).payload(&payload).key(key);
                 record.partition=partition;
 
                 debug!("Send {} bytes with key {}",payload.len(), key);
                 match kafka_producer.send(record, Timeout::Never).await {
                     Ok(_) => {
-                        Self::send_stat(stats_tx,payload.len(),addr,recv_time).await;
+                        Self::send_stat(stats_tx,payload.len(),recv_time).await;
                     }
-                    Err((_, _)) => {
-                        let _ = stats_tx.send(DataLoss);
+                    Err(_) => {
+                        Self::send_data_loss(stats_tx).await;
                     }
                 }
             });
@@ -97,7 +101,7 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
             let notify_prev = self.sender_tasks_map.insert(packet.1, notify_next.clone()).unwrap();
 
             spawn(async move {
-                let (payload, addr, recv_time) = packet;
+                let (payload, _, recv_time) = packet;
                 let mut record = FutureRecord::to(output_topic).payload(&payload).key(key);
                 record.partition=partition;
 
@@ -106,10 +110,10 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
                 notify_next.notify_one();
                 match kafka_producer.send(record, Timeout::Never).await {
                     Ok(_) => {
-                        Self::send_stat(stats_tx,payload.len(),addr,recv_time).await;
+                        Self::send_stat(stats_tx,payload.len(),recv_time).await;
                     }
-                    Err((_, _)) => {
-                        let _ = stats_tx.send(DataLoss);
+                    Err(_) => {
+                        Self::send_data_loss(stats_tx).await;
                     }
                 }
             });

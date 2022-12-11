@@ -5,8 +5,7 @@ use async_trait::async_trait;
 use derive_new::new;
 use kanal::AsyncReceiver;
 use tokio::{sync::broadcast, time::interval, select};
-use utilities::{logger::*, env_var::EnvVars, statistics::SimpleStatsHolder};
-use utilities::statistics::{Stats, StatsHolder};
+use utilities::{logger::*, env_var::EnvVars, statistics::{Stats,StatsHolder}};
 
 use crate::Task;
 
@@ -16,7 +15,6 @@ pub enum StatisticIncoming{
 }
 #[derive(new)]
 pub struct StatisticData {
-    addr: std::net::SocketAddr, 
     recv_time: Instant, 
     send_time: Instant, 
     size: usize
@@ -26,18 +24,13 @@ pub struct StatisticsTask {
     shutdown_receiver: broadcast::Receiver<()>,
     stats_rx: AsyncReceiver<StatisticIncoming>,
     timeout: Duration,
-    holder: Box<dyn Stats + Send>
+    holder: StatsHolder
 }
 
 impl StatisticsTask {
-    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: AsyncReceiver<StatisticIncoming>, simple: bool) -> Self {
+    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: AsyncReceiver<StatisticIncoming>) -> Self {
         let timeout = Duration::new(vars.stats_interval,0);
-        let holder: Box<dyn Stats + Send> = if simple {
-            Box::new(SimpleStatsHolder::new(timeout))
-        }
-        else {
-           Box::new(StatsHolder::new(timeout))
-        };
+        let holder = StatsHolder::new(timeout);
         
         Self {timeout, holder,stats_rx, shutdown_receiver}
     }
@@ -65,7 +58,7 @@ impl Task for StatisticsTask {
                 stat = self.stats_rx.recv() => {
                     if let Ok(data) = stat {
                         match data {
-                            StatisticIncoming::DataTransmitted(msg) => self.holder.add_stat(msg.addr, msg.recv_time, msg.send_time, msg.size),
+                            StatisticIncoming::DataTransmitted(msg) => self.holder.add_stat(msg.recv_time, msg.send_time, msg.size),
                             StatisticIncoming::DataLoss => self.holder.add_loss(),
                         }
                         
