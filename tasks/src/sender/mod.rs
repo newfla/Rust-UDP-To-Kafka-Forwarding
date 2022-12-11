@@ -3,7 +3,7 @@ use std::{time::Instant, net::SocketAddr, sync::Arc};
 use async_trait::async_trait;
 use kanal::AsyncSender;
 use rdkafka::{producer::{FutureProducer, FutureRecord}, util::Timeout};
-use rustc_hash::FxHashMap;
+use ahash::AHashMap;
 use tokio::{spawn, sync::Notify};
 use utilities::logger::debug;
 
@@ -74,7 +74,7 @@ impl PacketsOrderStrategy for PacketsNotSortedStrategy {
 
 #[derive(Default)]
 pub struct PacketsSortedByAddressStrategy {
-    sender_tasks_map: FxHashMap<SocketAddr,Arc<Notify>>
+    sender_tasks_map: AHashMap<SocketAddr,Arc<Notify>>
 }
 
 #[async_trait]

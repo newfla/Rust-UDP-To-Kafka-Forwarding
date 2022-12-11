@@ -2,7 +2,7 @@ use std::{time::Instant, net::SocketAddr};
 use fastrand::{Rng};
 use async_trait::async_trait;
 use tokio::sync::broadcast;
-use rustc_hash::FxHashMap;
+use ahash::AHashMap;
 use ustr::ustr;
 use derive_new::new;
 use utilities::logger::{error, debug};
@@ -76,7 +76,7 @@ impl PartitionStrategy for RoundRobinPartitionStrategy  {
 #[derive(new)]
 pub struct StickyRoundRobinPartitionStrategy {
     #[new(default)]
-    map_partition: FxHashMap<SocketAddr,(Option<i32>,&'static str)>,
+    map_partition: AHashMap<SocketAddr,(Option<i32>,&'static str)>,
     #[new(value = "fastrand::i32(0..num_partitions)")]
     start_partition: i32,
     num_partitions: i32
