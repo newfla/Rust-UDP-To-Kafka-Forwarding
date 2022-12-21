@@ -9,8 +9,8 @@ use utilities::{logger::*, env_var::EnvVars};
 use crate::{Task, DataPacket};
 
 pub fn build_socket_from_env(vars: &EnvVars) -> SocketAddr {
-    let ip: String = vars.server_ip.to_owned();
-    let port = vars.server_port.to_string();
+    let ip: String = vars.listen_ip.to_owned();
+    let port = vars.listen_port.to_string();
     (ip + ":" +&port).parse().unwrap()
 }
 

@@ -10,8 +10,8 @@ __'\*'__: only available when _KAFKA_PARTITION_STRATEGY_ is set to _RANDOM, ROUN
 
 ## Environment Variables Required
 ### Server Side:
-  - **SERVER_IP**: [default = 127.0.0.1]
-  - **SERVER_PORT**:  [default = 8888]
+  - **LISTEN_IP**: [default = 127.0.0.1]
+  - **LISTEN_PORT**:  [default = 8888]
   - **BUFFER_SIZE**: buffer size for the socket recv output [default = 1024]
   - **STATS_INTERVAL**: Refresh interval for the statistics [default = 10]
   - **WORKER_THREADS**: Number of worker threads for the Tokio runtime [default: #CPU core]

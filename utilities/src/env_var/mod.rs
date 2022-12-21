@@ -36,11 +36,11 @@ pub enum OrderStrategy {
 
 #[derive(Envconfig, Debug, Clone)]
 pub struct EnvVars {
-    #[envconfig(from = "SERVER_IP", default="127.0.0.1")]
-    pub server_ip: String,
+    #[envconfig(from = "LISTEN_IP", default="127.0.0.1")]
+    pub listen_ip: String,
     
-    #[envconfig(from = "SERVER_PORT", default="8888")]
-    pub server_port: u16,
+    #[envconfig(from = "LISTEN_PORT", default="8888")]
+    pub listen_port: u16,
 
     #[envconfig(from = "BUFFER_SIZE", default="1024")]
     pub buffer_size: usize,
