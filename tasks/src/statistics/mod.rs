@@ -38,7 +38,7 @@ impl StatisticsTask {
 
 #[async_trait]
 impl Task for StatisticsTask {
-    async fn run(&mut self) -> Result<(),String> {
+    async fn run(&mut self) {
         //Arm the timer to produce statistics at regular intervals 
         let mut timer = interval(self.timeout);
 
@@ -46,7 +46,6 @@ impl Task for StatisticsTask {
             select! {
                 _ = self.shutdown_receiver.recv() => {
                     info!("Shutting down statistics task");
-                    return Ok(());
                 }
                 _ = timer.tick() => {
                     if let Some(summary) = self.holder.calculate_and_reset() {
@@ -61,7 +60,6 @@ impl Task for StatisticsTask {
                             StatisticIncoming::DataTransmitted(msg) => self.holder.add_stat(msg.recv_time, msg.send_time, msg.size),
                             StatisticIncoming::DataLoss => self.holder.add_loss(),
                         }
-                        
                     }
                 }
             }

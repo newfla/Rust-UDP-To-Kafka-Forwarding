@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use kanal::{unbounded_async, bounded_async};
 use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
 use tokio::{runtime::Builder, sync::broadcast, select, signal, task::JoinSet};
-use utilities::{env_var::{EnvVars, self}, logger, logger::info};
+use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
 use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
 
@@ -23,7 +23,7 @@ impl ServerManagerTask {
     pub fn init(&mut self) -> Result<(),String> {
 
         //Init logger
-        logger!();
+        utilities::logger!();
 
         //Load env variables
         self.vars = utilities::env_var::load_env_var();
@@ -57,8 +57,11 @@ impl ServerManagerTask {
         let rt = rt_builder.enable_all().build();
 
         match rt {
-            Ok(rt) =>  rt.block_on(self.run()),
-            Err(_) =>  Err("Failed to initialize Tokio runtime".to_string())
+            Ok(rt) =>  {
+                rt.block_on(self.run());
+                Ok(())
+            }
+            Err(_) => Err("Failed to initialize Tokio runtime".to_string())
         }
     }
 
@@ -142,11 +145,12 @@ impl ServerManagerTask {
 
 #[async_trait]
 impl Task for ServerManagerTask {
-    async fn run(&mut self) -> Result<(),String> {
+    async fn run(&mut self) {
         let vars = self.vars.as_ref().unwrap();
 
         if self.producer.is_none()  {
-            return Err("kafka producer is not initializated".to_string());
+            error!("kafka producer is not initializated");
+            return;
         }
 
         let producer = mem::take(&mut self.producer).unwrap();
@@ -207,6 +211,5 @@ impl Task for ServerManagerTask {
 
         }
         info!("Bye Bye");
-        Ok(())
     }
 }

@@ -35,13 +35,13 @@ impl ReceiverTask {
 
 #[async_trait]
 impl Task for ReceiverTask {
-    async fn run(&mut self) -> Result<(),String> {
+    async fn run(&mut self) {
         //Socket binding handling 
         let socket = UdpSocket::bind(self.addr).await;
         if let Err(err)= socket {
             error!("Socket binding failed. Reaseon: {}",err);
             Self::propagate_shutdown(&self.shutdown_sender);
-            return Err(err.to_string());
+            return;
         }
 
         let socket = socket.unwrap();
@@ -53,7 +53,6 @@ impl Task for ReceiverTask {
             select! {
                 _ = self.shutdown_receiver.recv() => { 
                     info!("Shutting down receiver task");
-                    return Ok(());
                 }
 
                 data = socket.recv_from(&mut buf) => {
@@ -61,7 +60,6 @@ impl Task for ReceiverTask {
                         Err(err) => {
                             error!("Socket recv failed. Reason: {}", err);
                             Self::propagate_shutdown(&self.shutdown_sender);
-                            return Err(err.to_string());
                         },
                         Ok((len, addr)) => {
                             debug!("Received {} bytes from {}", len, addr);

@@ -34,7 +34,7 @@ impl DispatcherTask {
 
 #[async_trait]
 impl Task for DispatcherTask {
-    async fn run(&mut self) -> Result<(),String> {
+    async fn run(&mut self) {
         let topic = Box::leak(self.output_topic.clone().into_boxed_str());
         let producer = Box::leak(Box::new(self.kafka_producer.clone()));
         loop {
@@ -51,6 +51,5 @@ impl Task for DispatcherTask {
                 }
            }
         }
-        Ok(())
     }
 }

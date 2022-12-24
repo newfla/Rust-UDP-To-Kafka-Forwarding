@@ -18,7 +18,7 @@ type DataPacket = (Vec<u8>, SocketAddr, Instant);
 
 #[async_trait]
 pub trait Task {
-    async fn run(&mut self) -> Result<(),String>;
+    async fn run(&mut self);
 
     fn propagate_shutdown(shutdown_sender: &broadcast::Sender<()>){
         let shutdown_error_msg = "Failed to propagte spread shutdown signal!";
