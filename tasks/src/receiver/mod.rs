@@ -1,9 +1,9 @@
 use std::{net::SocketAddr, time::Instant};
 
 use async_trait::async_trait;
-
 use kanal::AsyncSender;
-use tokio::{net::UdpSocket, sync::broadcast, select};
+use tokio::{net::UdpSocket, select};
+use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars};
 
 use crate::{Task, DataPacket};
@@ -18,18 +18,16 @@ pub struct ReceiverTask {
     addr: SocketAddr,
     buffer_size: usize,
     dispatcher_sender: AsyncSender<DataPacket>,
-    shutdown_receiver: broadcast::Receiver<()>,
-    shutdown_sender: broadcast::Sender<()>
+    shutdown_token: CancellationToken
 }
 
 impl ReceiverTask {
-    pub fn new<F>(func: F, dispatcher: AsyncSender<DataPacket>, shutdown_receiver: broadcast::Receiver<()>, 
-        shutdown_sender: broadcast::Sender<()>, vars: &EnvVars) -> Self 
+    pub fn new<F>(func: F, dispatcher: AsyncSender<DataPacket>, shutdown_token: CancellationToken, vars: &EnvVars) -> Self 
     where
     F:Fn(&EnvVars) -> SocketAddr, {
             let addr = func(vars);
             let buffer_size = vars.buffer_size;
-            Self {addr, dispatcher_sender: dispatcher, shutdown_receiver, shutdown_sender, buffer_size}
+            Self {addr, dispatcher_sender: dispatcher, shutdown_token, buffer_size}
     }
 }
 
@@ -40,7 +38,7 @@ impl Task for ReceiverTask {
         let socket = UdpSocket::bind(self.addr).await;
         if let Err(err)= socket {
             error!("Socket binding failed. Reaseon: {}",err);
-            Self::propagate_shutdown(&self.shutdown_sender);
+            self.shutdown_token.cancel();
             return;
         }
 
@@ -51,7 +49,7 @@ impl Task for ReceiverTask {
         //Handle incoming UDP packets 
         loop {
             select! {
-                _ = self.shutdown_receiver.recv() => { 
+                _ = self.shutdown_token.cancelled() => { 
                     info!("Shutting down receiver task");
                 }
 
@@ -59,7 +57,7 @@ impl Task for ReceiverTask {
                     match data {
                         Err(err) => {
                             error!("Socket recv failed. Reason: {}", err);
-                            Self::propagate_shutdown(&self.shutdown_sender);
+                            self.shutdown_token.cancel();
                         },
                         Ok((len, addr)) => {
                             debug!("Received {} bytes from {}", len, addr);
@@ -67,7 +65,7 @@ impl Task for ReceiverTask {
                             unsafe{
                                 if self.dispatcher_sender.send((buf.get_unchecked(..len).to_vec(), addr, Instant::now())).await.is_err() {
                                     error!("Failed to send data to dispatcher");
-                                    Self::propagate_shutdown(&self.shutdown_sender);
+                                    self.shutdown_token.cancel();
                                 }
                             }
                         },

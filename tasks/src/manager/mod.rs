@@ -1,15 +1,15 @@
-use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}, FlipCoinStrategy};
 
 use std::{mem, time::Duration};
 
 use async_trait::async_trait;
-
 use kanal::{unbounded_async, bounded_async};
 use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
-use tokio::{runtime::Builder, sync::broadcast, select, signal, task::JoinSet};
+use tokio::{runtime::Builder, select, signal, task::JoinSet};
+use tokio_util::sync::CancellationToken;
 use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
 use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
+use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}, FlipCoinStrategy};
 
 #[derive(Default)]
 pub struct ServerManagerTask {
@@ -155,8 +155,8 @@ impl Task for ServerManagerTask {
 
         let producer = mem::take(&mut self.producer).unwrap();
 
-        //Define shutdown channel
-        let (tx_shutdown, mut rx_shutdown) = broadcast::channel::<()>(20);
+        //Define shutdown token
+        let shutdown_token = CancellationToken::new();
         
         //Communication channel between receiver and dispatcher tasks
         let (dispatcher_tx,dispatcher_rx) = bounded_async(vars.cache_size);
@@ -172,16 +172,15 @@ impl Task for ServerManagerTask {
         let func = build_socket_from_env;
 
         //Istantiate tasks
-        let mut stat_task = StatisticsTask::new(vars, tx_shutdown.subscribe(),stats_rx);
+        let mut stat_task = StatisticsTask::new(vars, shutdown_token.clone(),stats_rx);
         let mut receiver_task = ReceiverTask::new(
             func, 
             dispatcher_tx,
-            tx_shutdown.subscribe(),
-            tx_shutdown.clone(), 
+            shutdown_token.clone(), 
             vars);
             
         let mut dispatcher_task = DispatcherTask::new(
-            tx_shutdown.subscribe(),
+            shutdown_token.clone(),
             dispatcher_rx,
             stats_tx,
             checkpoint_strategy,
@@ -200,10 +199,10 @@ impl Task for ServerManagerTask {
         select! {
             _ = signal::ctrl_c() => {
                     info!("Received CTRL-C signal");
-                    Self::propagate_shutdown(&tx_shutdown);
+                    shutdown_token.cancel();
             },
             
-            _ = rx_shutdown.recv() => {
+            _ = shutdown_token.cancelled() => {
                 info!("Shutting down manager task");
             }
         }

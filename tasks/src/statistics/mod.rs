@@ -4,7 +4,8 @@ use async_trait::async_trait;
 
 use derive_new::new;
 use kanal::AsyncReceiver;
-use tokio::{sync::broadcast, time::interval, select};
+use tokio::{time::interval, select};
+use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars, statistics::{Stats,StatsHolder}};
 
 use crate::Task;
@@ -21,18 +22,18 @@ pub struct StatisticData {
 }
 
 pub struct StatisticsTask {
-    shutdown_receiver: broadcast::Receiver<()>,
+    shutdown_token: CancellationToken,
     stats_rx: AsyncReceiver<StatisticIncoming>,
     timeout: Duration,
     holder: StatsHolder
 }
 
 impl StatisticsTask {
-    pub fn new(vars: &EnvVars, shutdown_receiver: broadcast::Receiver<()>,stats_rx: AsyncReceiver<StatisticIncoming>) -> Self {
+    pub fn new(vars: &EnvVars, shutdown_token: CancellationToken, stats_rx: AsyncReceiver<StatisticIncoming>) -> Self {
         let timeout = Duration::new(vars.stats_interval,0);
         let holder = StatsHolder::new(timeout);
         
-        Self {timeout, holder,stats_rx, shutdown_receiver}
+        Self {timeout, holder,stats_rx, shutdown_token}
     }
 }
 
@@ -44,7 +45,7 @@ impl Task for StatisticsTask {
 
         loop  {
             select! {
-                _ = self.shutdown_receiver.recv() => {
+                _ = self.shutdown_token.cancelled() => {
                     info!("Shutting down statistics task");
                 }
                 _ = timer.tick() => {

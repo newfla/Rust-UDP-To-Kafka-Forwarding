@@ -1,11 +1,10 @@
 use std::{time::Instant, net::SocketAddr};
-use fastrand::{Rng};
+use fastrand::Rng;
 use async_trait::async_trait;
-use tokio::sync::broadcast;
 use ahash::AHashMap;
 use ustr::ustr;
 use derive_new::new;
-use utilities::logger::{error, debug};
+use utilities::logger::debug;
 
 mod statistics;
 mod receiver;
@@ -13,24 +12,18 @@ mod dispatcher;
 mod sender;
 pub mod manager;
 
-
 type DataPacket = (Vec<u8>, SocketAddr, Instant);
+type PartitionDetails = (Option<i32>, &'static str, u64);
 
 #[async_trait]
 pub trait Task {
     async fn run(&mut self);
-
-    fn propagate_shutdown(shutdown_sender: &broadcast::Sender<()>){
-        let shutdown_error_msg = "Failed to propagte spread shutdown signal!";
-        if shutdown_sender.send(()).is_err() {
-            error!("{}",shutdown_error_msg);
-        }
-    }
 }
 
 pub trait PartitionStrategy {
-    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>,&'static str) {
-        (None, ustr(&(addr.to_string()+"|auto")).as_str())
+    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
+        let key = ustr(&(addr.to_string()+"|auto"));
+        (None, key.as_str(),key.precomputed_hash())
     }
 }
 
@@ -46,10 +39,10 @@ pub struct RandomPartitionStrategy {
 }
 
 impl PartitionStrategy for RandomPartitionStrategy {
-    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
+    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         let next = self.rng.i32(0..self.num_partitions);
-        let key = addr.to_string() +"|"+ &next.to_string();
-        (Some(next),ustr(&key).as_str())
+        let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
+        (Some(next),key.as_str(),key.precomputed_hash())
     }
 }
 
@@ -62,34 +55,34 @@ pub struct RoundRobinPartitionStrategy  {
 
 
 impl PartitionStrategy for RoundRobinPartitionStrategy  {
-    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str){
+    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails{
         let next = (self.start_partition + 1) % self.num_partitions;
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);
 
-        let key = addr.to_string() +"|"+ &next.to_string();
-        (Some(next),ustr(&key).as_str())
+        let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
+        (Some(next),key.as_str(),key.precomputed_hash())
     }
 }
 
 #[derive(new)]
 pub struct StickyRoundRobinPartitionStrategy {
     #[new(default)]
-    map_partition: AHashMap<SocketAddr,(Option<i32>,&'static str)>,
+    map_partition: AHashMap<SocketAddr,(Option<i32>, &'static str, u64)>,
     #[new(value = "fastrand::i32(0..num_partitions)")]
     start_partition: i32,
     num_partitions: i32
 }
 
 impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
-    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
+    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         if let Some (val) = self.map_partition.get(addr) {
             return *val;
         }
         let next = (self.start_partition + 1) % self.num_partitions;
-        let key = addr.to_string() +"|"+ &next.to_string();
-        let val = (Some(next),ustr(&key).as_str());
+        let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
+        let val = (Some(next),key.as_str(),key.precomputed_hash());
         self.map_partition.insert(*addr,val);
         self.start_partition = next;
 
@@ -107,7 +100,7 @@ pub enum PartitionStrategies {
 }
 
 impl PartitionStrategy for PartitionStrategies {
-    fn partition(&mut self, addr: &SocketAddr) -> (Option<i32>, &'static str) {
+    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         match self {
             PartitionStrategies::NonePartition(strategy) => strategy.partition(addr),
             PartitionStrategies::RandomPartition(strategy) => strategy.partition(addr),

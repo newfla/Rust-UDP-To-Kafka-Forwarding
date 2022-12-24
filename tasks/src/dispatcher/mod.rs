@@ -2,14 +2,15 @@ use async_trait::async_trait;
 use derive_new::new;
 use kanal::{AsyncReceiver, AsyncSender};
 use rdkafka::producer::FutureProducer;
-use tokio::{sync::broadcast, select};
+use tokio::select;
+use tokio_util::sync::CancellationToken;
 use utilities::logger::*;
 
 use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, sender::{PacketsOrderStrategies, PacketsOrderStrategy}};
 
 #[derive(new)]
 pub struct DispatcherTask {
-    shutdown_receiver: broadcast::Receiver<()>,
+    shutdown_token: CancellationToken,
     dispatcher_receiver: AsyncReceiver<DataPacket>,
     stats_tx: AsyncSender<StatisticIncoming>, 
     checkpoint_strategy: CheckpointStrategies,
@@ -28,7 +29,7 @@ impl DispatcherTask {
             return; 
         }
         debug!("Dispatching packet {}",partition.1);
-        self.order_strategy.send_to_kafka(packet, partition.0, partition.1, producer, self.stats_tx.clone(), topic).await;
+        self.order_strategy.send_to_kafka(packet, partition, producer, self.stats_tx.clone(), topic).await;
     }
 }
 
@@ -39,7 +40,7 @@ impl Task for DispatcherTask {
         let producer = Box::leak(Box::new(self.kafka_producer.clone()));
         loop {
            select! {
-                _ = self.shutdown_receiver.recv() => { 
+                _ = self.shutdown_token.cancelled() => { 
                     info!("Shutting down dispatcher task");
                     break;
                 }
