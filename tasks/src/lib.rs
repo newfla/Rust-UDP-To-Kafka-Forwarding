@@ -1,7 +1,7 @@
 use std::{time::Instant, net::SocketAddr};
 use fastrand::Rng;
 use async_trait::async_trait;
-use ahash::AHashMap;
+use hashbrown::HashMap;
 use ustr::ustr;
 use derive_new::new;
 use utilities::logger::debug;
@@ -69,7 +69,7 @@ impl PartitionStrategy for RoundRobinPartitionStrategy  {
 #[derive(new)]
 pub struct StickyRoundRobinPartitionStrategy {
     #[new(default)]
-    map_partition: AHashMap<SocketAddr,(Option<i32>, &'static str, u64)>,
+    map_partition: HashMap<u16,(Option<i32>, &'static str, u64)>,
     #[new(value = "fastrand::i32(0..num_partitions)")]
     start_partition: i32,
     num_partitions: i32
@@ -77,13 +77,13 @@ pub struct StickyRoundRobinPartitionStrategy {
 
 impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
-        if let Some (val) = self.map_partition.get(addr) {
+        if let Some (val) = self.map_partition.get(&addr.port()) {
             return *val;
         }
         let next = (self.start_partition + 1) % self.num_partitions;
         let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
         let val = (Some(next),key.as_str(),key.precomputed_hash());
-        self.map_partition.insert(*addr,val);
+        self.map_partition.insert(addr.port(),val);
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);
