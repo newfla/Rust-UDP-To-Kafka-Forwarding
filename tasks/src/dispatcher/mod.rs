@@ -28,8 +28,7 @@ impl DispatcherTask {
         if !self.checkpoint_strategy.check((&packet,&partition.0)) {
             return; 
         }
-        debug!("Dispatching packet {}",partition.1);
-        self.order_strategy.send_to_kafka(packet, partition, producer, self.stats_tx.clone(), topic).await;
+        self.order_strategy.send_to_kafka(packet, partition, producer, self.stats_tx.clone(), topic);
     }
 }
 

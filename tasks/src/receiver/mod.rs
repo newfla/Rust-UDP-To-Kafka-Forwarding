@@ -8,12 +8,6 @@ use utilities::{logger::*, env_var::EnvVars};
 
 use crate::{Task, DataPacket};
 
-pub fn build_socket_from_env(vars: &EnvVars) -> SocketAddr {
-    let ip: String = vars.listen_ip.to_owned();
-    let port = vars.listen_port.to_string();
-    (ip + ":" +&port).parse().unwrap()
-}
-
 pub struct ReceiverTask {
     addr: SocketAddr,
     buffer_size: usize,
@@ -22,12 +16,16 @@ pub struct ReceiverTask {
 }
 
 impl ReceiverTask {
-    pub fn new<F>(func: F, dispatcher: AsyncSender<DataPacket>, shutdown_token: CancellationToken, vars: &EnvVars) -> Self 
-    where
-    F:Fn(&EnvVars) -> SocketAddr, {
-            let addr = func(vars);
+    pub fn new(dispatcher: AsyncSender<DataPacket>, shutdown_token: CancellationToken, vars: &EnvVars) -> Self {
+            let addr = Self::build_socket_from_env(vars);
             let buffer_size = vars.buffer_size;
             Self {addr, dispatcher_sender: dispatcher, shutdown_token, buffer_size}
+    }
+
+    fn build_socket_from_env(vars: &EnvVars) -> SocketAddr {
+        let ip = vars.listen_ip.to_owned();
+        let port = vars.listen_port.to_string();
+        (ip + ":" +&port).parse().unwrap()
     }
 }
 

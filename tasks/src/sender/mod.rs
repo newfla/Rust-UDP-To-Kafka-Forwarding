@@ -27,7 +27,7 @@ pub trait PacketsOrderStrategy {
         let _ = stats_tx.send(DataLoss).await;
     }
 
-    async fn send_to_kafka(
+    fn send_to_kafka(
         &mut self,
         packet: DataPacket,
         partition_detail: PartitionDetails,
@@ -40,10 +40,9 @@ pub struct PacketsNotSortedStrategy {
 
 }
 
-#[async_trait]
 impl PacketsOrderStrategy for PacketsNotSortedStrategy {
     #[inline(always)]
-    async fn send_to_kafka(
+    fn send_to_kafka(
         &mut self,
         packet: DataPacket,
         partition_detail: PartitionDetails,
@@ -74,10 +73,9 @@ pub struct PacketsSortedByAddressStrategy {
     sender_tasks_map: IntMap<u64,Arc<Notify>>
 }
 
-#[async_trait]
 impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
     #[inline(always)]
-    async fn send_to_kafka(
+    fn send_to_kafka(
         &mut self,
         packet: DataPacket,
         partition_detail: PartitionDetails,
@@ -122,10 +120,9 @@ pub enum PacketsOrderStrategies {
     SortedByAddress(PacketsSortedByAddressStrategy)
 }
 
-#[async_trait]
 impl PacketsOrderStrategy for PacketsOrderStrategies {
     #[inline(always)]
-    async fn send_to_kafka(
+    fn send_to_kafka(
         &mut self,
         packet: DataPacket,
         partition_detail: PartitionDetails,
@@ -133,8 +130,8 @@ impl PacketsOrderStrategy for PacketsOrderStrategies {
         stats_tx: AsyncSender<StatisticIncoming>,
         output_topic: &'static str) {
             match self {
-                PacketsOrderStrategies::NotSorted(strategy) => strategy.send_to_kafka(packet, partition_detail, kafka_producer, stats_tx, output_topic).await,
-                PacketsOrderStrategies::SortedByAddress(strategy) => strategy.send_to_kafka(packet, partition_detail, kafka_producer, stats_tx, output_topic).await,
+                PacketsOrderStrategies::NotSorted(strategy) => strategy.send_to_kafka(packet, partition_detail, kafka_producer, stats_tx, output_topic),
+                PacketsOrderStrategies::SortedByAddress(strategy) => strategy.send_to_kafka(packet, partition_detail, kafka_producer, stats_tx, output_topic),
             }
     }
 }

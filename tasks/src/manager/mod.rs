@@ -8,7 +8,7 @@ use tokio::{runtime::Builder, select, signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
-use crate::{Task, statistics::StatisticsTask, receiver::{ReceiverTask, build_socket_from_env}, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
+use crate::{Task, statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
 use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}, FlipCoinStrategy};
 
 #[derive(Default)]
@@ -168,13 +168,9 @@ impl Task for ServerManagerTask {
         //Define channel to send statistics update
         let (stats_tx,stats_rx) = unbounded_async();
 
-        //Istantiate closure to build socketaddr for the receiver 
-        let func = build_socket_from_env;
-
         //Istantiate tasks
         let mut stat_task = StatisticsTask::new(vars, shutdown_token.clone(),stats_rx);
-        let mut receiver_task = ReceiverTask::new(
-            func, 
+        let mut receiver_task = ReceiverTask::new( 
             dispatcher_tx,
             shutdown_token.clone(), 
             vars);
