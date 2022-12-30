@@ -90,6 +90,9 @@ pub struct EnvVars {
     #[envconfig(from = "KAFKA_RETRIES", default="1")]
     pub kafka_retries: u32,
 
+    #[envconfig(from = "USE_PROTO", default="false")]
+    pub use_proto: bool,
+
 }
 
 impl EnvVars {

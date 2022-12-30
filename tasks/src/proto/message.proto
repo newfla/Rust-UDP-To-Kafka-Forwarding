@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package sender.proto;
+
+message KafkaMessage {
+    string address = 1;
+    int32 partition = 2;
+    bytes data = 3;
+}

@@ -21,7 +21,8 @@ pub struct DispatcherTask {
     partition_strategy: PartitionStrategies,
     order_strategy: PacketsOrderStrategies,
     kafka_producer: FutureProducer,
-    output_topic: Ustr
+    output_topic: Ustr,
+    use_proto: bool
 }
 
 impl DispatcherTask {
@@ -32,7 +33,7 @@ impl DispatcherTask {
         if !self.checkpoint_strategy.check((&packet,&partition.0)) {
             return; 
         }
-        self.order_strategy.send_to_kafka(packet, partition, producer, self.stats_tx.clone(), topic);
+        self.order_strategy.send_to_kafka(packet, partition, producer, self.stats_tx.clone(), topic,self.use_proto);
     }
 }
 

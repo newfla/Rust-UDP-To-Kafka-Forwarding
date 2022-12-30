@@ -184,7 +184,8 @@ impl Task for ServerManagerTask {
             partition_strategy,
             order_strategy,
             producer,
-            ustr(&vars.kafka_topic));
+            ustr(&vars.kafka_topic),
+            vars.use_proto);
 
         //Schedule tasks
         let mut set = JoinSet::new();

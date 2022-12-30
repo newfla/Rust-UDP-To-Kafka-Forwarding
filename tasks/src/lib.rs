@@ -77,7 +77,7 @@ pub struct StickyRoundRobinPartitionStrategy {
 
 impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
-        if let Some (val) = self.map_partition.get(&addr) {
+        if let Some (val) = self.map_partition.get(addr) {
             return *val;
         }
         let next = (self.start_partition + 1) % self.num_partitions;
