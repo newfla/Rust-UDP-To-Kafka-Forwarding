@@ -3,10 +3,14 @@ use derive_new::new;
 use kanal::{AsyncReceiver, AsyncSender};
 use rdkafka::producer::FutureProducer;
 use tokio::select;
+use tokio::sync::OnceCell;
 use tokio_util::sync::CancellationToken;
+use ustr::Ustr;
 use utilities::logger::*;
 
 use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, sender::{PacketsOrderStrategies, PacketsOrderStrategy}};
+
+static ONCE_PRODUCER: OnceCell<FutureProducer> = OnceCell::const_new();
 
 #[derive(new)]
 pub struct DispatcherTask {
@@ -17,7 +21,7 @@ pub struct DispatcherTask {
     partition_strategy: PartitionStrategies,
     order_strategy: PacketsOrderStrategies,
     kafka_producer: FutureProducer,
-    output_topic: String
+    output_topic: Ustr
 }
 
 impl DispatcherTask {
@@ -35,8 +39,8 @@ impl DispatcherTask {
 #[async_trait]
 impl Task for DispatcherTask {
     async fn run(&mut self) {
-        let topic = Box::leak(self.output_topic.clone().into_boxed_str());
-        let producer = Box::leak(Box::new(self.kafka_producer.clone()));
+        let topic = self.output_topic.as_str();
+        let producer = ONCE_PRODUCER.get_or_init(|| async {self.kafka_producer.clone()}).await;
         loop {
            select! {
                 _ = self.shutdown_token.cancelled() => { 

@@ -51,8 +51,8 @@ impl PacketsOrderStrategy for PacketsNotSortedStrategy {
         output_topic: &'static str) {
             spawn(async move {
                 let (payload, _, recv_time) = packet;
-                let (partition, key, _) = partition_detail;
-                let mut record = FutureRecord::to(output_topic).payload(&payload).key(key);
+                let (partition, key) = partition_detail;
+                let mut record = FutureRecord::to(output_topic).payload(&payload).key(key.as_str());
                 record.partition=partition;
 
                 debug!("Send {} bytes with key {}",payload.len(), key);
@@ -83,7 +83,8 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
         stats_tx: AsyncSender<StatisticIncoming>,
         output_topic: &'static str) {
             let (payload, _, recv_time) = packet;
-            let (partition, key, key_hash) = partition_detail;
+            let (partition, key) = partition_detail;
+            let key_hash = key.precomputed_hash();
 
             if self.sender_tasks_map.get(&key_hash).is_none() {
                 //Notify from fake previous task
@@ -97,7 +98,7 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
             let notify_prev = self.sender_tasks_map.insert(key_hash, notify_next.clone()).unwrap();
 
             spawn(async move {
-                let mut record = FutureRecord::to(output_topic).payload(&payload).key(key);
+                let mut record = FutureRecord::to(output_topic).payload(&payload).key(key.as_str());
                 record.partition=partition;
 
                 debug!("Send {} bytes with key {}",payload.len(), key);

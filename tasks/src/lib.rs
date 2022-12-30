@@ -1,8 +1,8 @@
 use std::{time::Instant, net::SocketAddr};
+use ahash::AHashMap;
 use fastrand::Rng;
 use async_trait::async_trait;
-use hashbrown::HashMap;
-use ustr::ustr;
+use ustr::{ustr, Ustr};
 use derive_new::new;
 use utilities::logger::debug;
 
@@ -13,7 +13,7 @@ mod sender;
 pub mod manager;
 
 type DataPacket = (Vec<u8>, SocketAddr, Instant);
-type PartitionDetails = (Option<i32>, &'static str, u64);
+type PartitionDetails = (Option<i32>, Ustr);
 
 #[async_trait]
 pub trait Task {
@@ -23,7 +23,7 @@ pub trait Task {
 pub trait PartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         let key = ustr(&(addr.to_string()+"|auto"));
-        (None, key.as_str(),key.precomputed_hash())
+        (None, key)
     }
 }
 
@@ -42,7 +42,7 @@ impl PartitionStrategy for RandomPartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         let next = self.rng.i32(0..self.num_partitions);
         let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
-        (Some(next),key.as_str(),key.precomputed_hash())
+        (Some(next),key)
     }
 }
 
@@ -55,21 +55,21 @@ pub struct RoundRobinPartitionStrategy  {
 
 
 impl PartitionStrategy for RoundRobinPartitionStrategy  {
-    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails{
+    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         let next = (self.start_partition + 1) % self.num_partitions;
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);
 
         let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
-        (Some(next),key.as_str(),key.precomputed_hash())
+        (Some(next),key)
     }
 }
 
 #[derive(new)]
 pub struct StickyRoundRobinPartitionStrategy {
     #[new(default)]
-    map_partition: HashMap<u16,(Option<i32>, &'static str, u64)>,
+    map_partition: AHashMap<SocketAddr,PartitionDetails>,
     #[new(value = "fastrand::i32(0..num_partitions)")]
     start_partition: i32,
     num_partitions: i32
@@ -77,13 +77,13 @@ pub struct StickyRoundRobinPartitionStrategy {
 
 impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
-        if let Some (val) = self.map_partition.get(&addr.port()) {
+        if let Some (val) = self.map_partition.get(&addr) {
             return *val;
         }
         let next = (self.start_partition + 1) % self.num_partitions;
         let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
-        let val = (Some(next),key.as_str(),key.precomputed_hash());
-        self.map_partition.insert(addr.port(),val);
+        let val = (Some(next),key);
+        self.map_partition.insert(*addr,val);
         self.start_partition = next;
 
         debug!("SockAddr: {} partition: {}",addr, next);

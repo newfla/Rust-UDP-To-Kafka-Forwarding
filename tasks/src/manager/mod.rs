@@ -6,6 +6,7 @@ use kanal::{unbounded_async, bounded_async};
 use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
 use tokio::{runtime::Builder, select, signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
+use ustr::ustr;
 use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
 use crate::{Task, statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
@@ -183,7 +184,7 @@ impl Task for ServerManagerTask {
             partition_strategy,
             order_strategy,
             producer,
-            vars.kafka_topic.to_owned());
+            ustr(&vars.kafka_topic));
 
         //Schedule tasks
         let mut set = JoinSet::new();
