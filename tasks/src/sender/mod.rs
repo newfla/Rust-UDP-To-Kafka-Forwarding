@@ -1,14 +1,14 @@
-use std::{time::Instant, sync::Arc, net::SocketAddr};
+use std::{time::Instant, net::SocketAddr};
 
 use async_trait::async_trait;
 use kanal::AsyncSender;
 use nohash_hasher::IntMap;
 use rdkafka::{producer::{FutureProducer, FutureRecord}, util::Timeout};
-use tokio::{spawn, sync::Notify};
+use tokio::spawn;
 use utilities::logger::debug;
 use prost::Message;
 
-use crate::{statistics::{StatisticIncoming::{*, self}, StatisticData}, DataPacket, PartitionDetails,sender::proto::KafkaMessage};
+use crate::{statistics::{StatisticIncoming::{*, self}, StatisticData}, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket};
 
 
 // Include the `items` module, which is generated from items.proto.
@@ -64,7 +64,7 @@ impl PacketsOrderStrategy for PacketsNotSortedStrategy {
         use_proto: bool) {
             spawn(async move {
                 let (mut payload, addr, recv_time) = packet;
-                let (partition, key) = partition_detail;
+                let (partition, key, _) = partition_detail;
                 
                 if use_proto {
                     payload = Self::build_message(&addr,payload, &partition_detail.0).encode_to_vec();
@@ -88,7 +88,7 @@ impl PacketsOrderStrategy for PacketsNotSortedStrategy {
 
 #[derive(Default)]
 pub struct PacketsSortedByAddressStrategy {
-    sender_tasks_map: IntMap<u64,Arc<Notify>>
+    sender_tasks_map: IntMap<u64,Ticket>
 }
 
 impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
@@ -102,18 +102,18 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
         output_topic: &'static str,
         use_proto: bool) {
             let (mut payload, addr, recv_time) = packet;
-            let (partition, key) = partition_detail;
-            let key_hash = key.precomputed_hash();
+            let (partition, key, key_hash) = partition_detail;
+            let key_hash = key_hash.precomputed_hash();
 
             if self.sender_tasks_map.get(&key_hash).is_none() {
                 //Notify from fake previous task
-                let fake_notify = Arc::new(Notify::new());
+                let fake_notify = Ticket::default();
                 let _ = self.sender_tasks_map.insert(key_hash, fake_notify.clone());
                 fake_notify.notify_one();
             };
 
             //Notify for the next task
-            let notify_next = Arc::new(Notify::new());
+            let notify_next = Ticket::default();
             let notify_prev = self.sender_tasks_map.insert(key_hash, notify_next.clone()).unwrap();
 
             spawn(async move {

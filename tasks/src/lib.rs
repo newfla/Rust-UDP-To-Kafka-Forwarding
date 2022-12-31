@@ -1,7 +1,8 @@
-use std::{time::Instant, net::SocketAddr};
+use std::{time::Instant, net::SocketAddr, sync::Arc};
 use ahash::AHashMap;
 use fastrand::Rng;
 use async_trait::async_trait;
+use tokio::sync::Notify;
 use ustr::{ustr, Ustr};
 use derive_new::new;
 use utilities::logger::debug;
@@ -13,7 +14,8 @@ mod sender;
 pub mod manager;
 
 type DataPacket = (Vec<u8>, SocketAddr, Instant);
-type PartitionDetails = (Option<i32>, Ustr);
+type PartitionDetails = (Option<i32>, Ustr, Ustr);
+type Ticket = Arc<Notify>;
 
 #[async_trait]
 pub trait Task {
@@ -23,7 +25,7 @@ pub trait Task {
 pub trait PartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         let key = ustr(&(addr.to_string()+"|auto"));
-        (None, key)
+        (None, key,key)
     }
 }
 
@@ -41,8 +43,10 @@ pub struct RandomPartitionStrategy {
 impl PartitionStrategy for RandomPartitionStrategy {
     fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
         let next = self.rng.i32(0..self.num_partitions);
-        let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
-        (Some(next),key)
+        let addr_str = addr.to_string();
+        let key = ustr(&(addr_str.clone() + "|"+ &next.to_string()));
+        let order_key = ustr(&addr_str);
+        (Some(next),key,order_key)
     }
 }
 
@@ -61,8 +65,10 @@ impl PartitionStrategy for RoundRobinPartitionStrategy  {
 
         debug!("SockAddr: {} partition: {}",addr, next);
 
-        let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
-        (Some(next),key)
+        let addr_str = addr.to_string();
+        let key = ustr(&(addr_str.clone() + "|"+ &next.to_string()));
+        let order_key = ustr(&addr_str);
+        (Some(next),key,order_key)
     }
 }
 
@@ -82,7 +88,7 @@ impl PartitionStrategy for StickyRoundRobinPartitionStrategy {
         }
         let next = (self.start_partition + 1) % self.num_partitions;
         let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
-        let val = (Some(next),key);
+        let val = (Some(next),key,key);
         self.map_partition.insert(*addr,val);
         self.start_partition = next;
 
