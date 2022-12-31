@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use derive_new::new;
 use kanal::{AsyncReceiver, AsyncSender};
 use rdkafka::producer::FutureProducer;
 use tokio::select;
@@ -8,11 +7,10 @@ use tokio_util::sync::CancellationToken;
 use ustr::Ustr;
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, sender::{PacketsOrderStrategies, PacketsOrderStrategy}};
+use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, sender::{PacketsOrderStrategies, PacketsOrderStrategy}, Strategies, SenderInfo};
 
 static ONCE_PRODUCER: OnceCell<FutureProducer> = OnceCell::const_new();
 
-#[derive(new)]
 pub struct DispatcherTask {
     shutdown_token: CancellationToken,
     dispatcher_receiver: AsyncReceiver<DataPacket>,
@@ -25,7 +23,21 @@ pub struct DispatcherTask {
     use_proto: bool
 }
 
+
 impl DispatcherTask {
+
+    pub fn new (
+        shutdown_token: CancellationToken,
+        dispatcher_receiver: AsyncReceiver<DataPacket>,
+        stats_tx: AsyncSender<StatisticIncoming>,
+        strategies: Strategies,
+        sender_info: SenderInfo) -> Self {
+
+            let (checkpoint_strategy, partition_strategy, order_strategy) = strategies;
+            let (kafka_producer, output_topic, use_proto) = sender_info;
+
+            Self { shutdown_token, dispatcher_receiver, stats_tx, checkpoint_strategy, partition_strategy, order_strategy, kafka_producer, output_topic, use_proto}
+    }
 
     #[inline(always)]
     async fn dispatch_packet(&mut self, packet: DataPacket, topic: &'static str, producer: &'static FutureProducer) {

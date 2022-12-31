@@ -3,7 +3,7 @@ use std::{mem, time::Duration};
 
 use async_trait::async_trait;
 use kanal::{unbounded_async, bounded_async};
-use rdkafka::{producer::FutureProducer, ClientConfig, error::KafkaError, consumer::{BaseConsumer, Consumer}};
+use rdkafka::{producer::{FutureProducer, Producer}, ClientConfig, error::KafkaError};
 use tokio::{runtime::Builder, select, signal, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 use ustr::ustr;
@@ -33,20 +33,23 @@ impl ServerManagerTask {
         }
 
         //Build rdkafka config
-        let kafka_config = self.build_kafka_config();
-        let producer = Self::build_kafka_producer(&kafka_config);
-        let partitions_count = self.find_partition_number(&kafka_config);
+        let producer = self.build_kafka_producer();
 
-        if let Err(err) = producer {
-            return Err(err.to_string());
+        match producer {
+            Err(err) => Err(err.to_string()),
+            Ok(producer) => {
+
+                let partitions_count = self.find_partition_number(&producer);
+                self.kafka_num_partitions = partitions_count? as i32;
+        
+                info!("Founded {} partitions for the topic '{}'",self.kafka_num_partitions,  self.vars.as_ref().unwrap().kafka_topic.as_str());
+                self.producer = Some(producer);
+                
+                Ok(())
+            }
+            
         }
         
-        self.kafka_num_partitions = partitions_count? as i32;
-        
-        info!("Founded {} partitions for the topic '{}'",self.kafka_num_partitions,  self.vars.as_ref().unwrap().kafka_topic.as_str());
-        self.producer = producer.ok();
-        
-        Ok(())
     }
     
     pub fn start(&mut self) ->Result<(),String> {
@@ -66,7 +69,7 @@ impl ServerManagerTask {
         }
     }
 
-    fn build_kafka_config(&self) -> ClientConfig {
+    fn build_kafka_producer(&self) -> Result<FutureProducer,KafkaError> {
         let vars = self.vars.as_ref().unwrap();
         ClientConfig::new()
             .set("bootstrap.servers", vars.kafka_brokers.to_owned())
@@ -77,33 +80,24 @@ impl ServerManagerTask {
             .set("compression.codec", vars.kafka_compression_codec.to_string())
             .set("request.required.acks", vars.kafka_request_required_acks.to_string())
             .set("retries", vars.kafka_retries.to_string())
-            .to_owned()
+            .create()
     }
 
-    fn build_kafka_producer(config: &ClientConfig) -> Result<FutureProducer,KafkaError> {
-        config.create()
-    }
-
-    fn find_partition_number(&self, config: &ClientConfig) -> Result<usize,String> {
-        let consumer: Result<BaseConsumer,KafkaError> = config.create();
+    fn find_partition_number(&self, producer: &FutureProducer) -> Result<usize,String> {
         let topic_name = self.vars.as_ref().unwrap().kafka_topic.as_str();
         let timeout = Duration::from_secs(30);
-        match consumer {
-            Err(_) => Err("Failed to initialize metadata consumer".to_string()),
-            Ok(consumer) => {
-                match consumer.fetch_metadata(Some(topic_name), timeout) {
-                    Err(_) => Err("Failed to retrieve topic metadata".to_string()),
-                    Ok(metadata) => {
-                        match metadata.topics().first() {
-                            None => Err("Topic".to_string() + topic_name +  "not found"),
-                            Some(data) => {
-                                if data.partitions().is_empty() {
-                                    Err("Topic has 0 partitions".to_string())
-                                }else{
-                                    Ok(data.partitions().len())}
-                                },
-                        }
-                    },
+
+        match producer.client().fetch_metadata(Some(topic_name), timeout) {
+            Err(_) => Err("Failed to retrieve topic metadata".to_string()),
+            Ok(metadata) => {
+                match metadata.topics().first() {
+                    None => Err("Topic".to_string() + topic_name +  "not found"),
+                    Some(data) => {
+                        if data.partitions().is_empty() {
+                            Err("Topic has 0 partitions".to_string())
+                        }else{
+                            Ok(data.partitions().len())}
+                        },
                 }
             },
         }
@@ -180,12 +174,8 @@ impl Task for ServerManagerTask {
             shutdown_token.clone(),
             dispatcher_rx,
             stats_tx,
-            checkpoint_strategy,
-            partition_strategy,
-            order_strategy,
-            producer,
-            ustr(&vars.kafka_topic),
-            vars.use_proto);
+            (checkpoint_strategy, partition_strategy, order_strategy),
+            (producer, ustr(&vars.kafka_topic), vars.use_proto));
 
         //Schedule tasks
         let mut set = JoinSet::new();
