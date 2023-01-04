@@ -125,13 +125,24 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
 
                 debug!("Send {} bytes with key {}",payload.len(), key);
                 notify_prev.notified().await;
-                notify_next.notify_one();
-                match kafka_producer.send(record, Timeout::Never).await {
-                    Ok(_) => {
-                        Self::send_stat(stats_tx,payload.len(),recv_time).await;
-                    }
-                    Err(_) => {
-                        Self::send_data_loss(stats_tx).await;
+
+                'send_loop: loop {
+                    match kafka_producer.send_result(record) {
+                        Ok(enqueuing_ok) => {
+                            notify_next.notify_one();
+                            match enqueuing_ok.await {
+                                Ok(_) => {
+                                    Self::send_stat(stats_tx,payload.len(),recv_time).await;
+                                }
+                                Err(_) => {
+                                    Self::send_data_loss(stats_tx).await;
+                                }
+                            }
+                            break 'send_loop;
+                        }
+                        Err((_,rec)) => {
+                            record = rec;
+                        }
                     }
                 }
             });
