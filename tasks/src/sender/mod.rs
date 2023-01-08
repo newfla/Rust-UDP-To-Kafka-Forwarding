@@ -1,23 +1,42 @@
 use std::{time::Instant, net::SocketAddr};
 
-use async_trait::async_trait;
 use kanal::AsyncSender;
 use nohash_hasher::IntMap;
-use rdkafka::{producer::{FutureProducer, FutureRecord}, util::Timeout};
+use once_cell::sync::OnceCell;
+use rdkafka::producer::{FutureProducer, FutureRecord};
 use tokio::spawn;
+use ustr::Ustr;
 use utilities::logger::debug;
 use prost::Message;
 
 use crate::{statistics::{StatisticIncoming::{*, self}, StatisticData}, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket};
 
+static ONCE_PRODUCER: OnceCell<FutureProducer> = OnceCell::new();
 
 // Include the `items` module, which is generated from items.proto.
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/sender.proto.rs"));
 }
 
-#[async_trait]
-pub trait PacketsOrderStrategy {
+pub struct KafkaPacketSender {
+    producer: &'static FutureProducer,
+    output_topic: &'static str,
+    use_proto: bool,
+    sender_tasks_map: IntMap<u64,Ticket>
+}
+
+impl KafkaPacketSender{
+
+    pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool) -> Self{
+        let producer = ONCE_PRODUCER.get_or_init(|| {kafka_producer});
+        let output_topic = output_topic.as_str();
+        Self {
+            producer,
+            output_topic,
+            use_proto,
+            sender_tasks_map: IntMap::default()
+        }
+    }
 
     #[inline(always)]
     async fn send_stat(stats_tx: AsyncSender<StatisticIncoming>,len: usize, recv_time: Instant) {
@@ -34,73 +53,17 @@ pub trait PacketsOrderStrategy {
         let _ = stats_tx.send(DataLoss).await;
     }
 
+    #[inline(always)]
     fn build_message(addr: &SocketAddr, payload: Vec<u8>, partition: &Option<i32>) -> KafkaMessage {
         KafkaMessage { data: payload, address: addr.to_string(), partition: partition.unwrap_or(-1) }
     }
-
-    fn send_to_kafka(
-        &mut self,
-        packet: DataPacket,
-        partition_detail: PartitionDetails,
-        kafka_producer: &'static FutureProducer,
-        stats_tx: AsyncSender<StatisticIncoming>,
-        output_topic: &'static str,
-        use_proto: bool);
-}
-#[derive(Default)]
-pub struct PacketsNotSortedStrategy {
-
-}
-
-impl PacketsOrderStrategy for PacketsNotSortedStrategy {
+    
     #[inline(always)]
-    fn send_to_kafka(
+    pub fn send_to_kafka(
         &mut self,
         packet: DataPacket,
         partition_detail: PartitionDetails,
-        kafka_producer: &'static FutureProducer,
-        stats_tx: AsyncSender<StatisticIncoming>,
-        output_topic: &'static str,
-        use_proto: bool) {
-            spawn(async move {
-                let (mut payload, addr, recv_time) = packet;
-                let (partition, key, _) = partition_detail;
-                
-                if use_proto {
-                    payload = Self::build_message(&addr,payload, &partition_detail.0).encode_to_vec();
-                }
-                
-                let mut record = FutureRecord::to(output_topic).payload(&payload).key(key.as_str());
-                record.partition=partition;
-
-                debug!("Send {} bytes with key {}",payload.len(), key);
-                match kafka_producer.send(record, Timeout::Never).await {
-                    Ok(_) => {
-                        Self::send_stat(stats_tx,payload.len(),recv_time).await;
-                    }
-                    Err(_) => {
-                        Self::send_data_loss(stats_tx).await;
-                    }
-                }
-            });
-    }
-}
-
-#[derive(Default)]
-pub struct PacketsSortedByAddressStrategy {
-    sender_tasks_map: IntMap<u64,Ticket>
-}
-
-impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
-    #[inline(always)]
-    fn send_to_kafka(
-        &mut self,
-        packet: DataPacket,
-        partition_detail: PartitionDetails,
-        kafka_producer: &'static FutureProducer,
-        stats_tx: AsyncSender<StatisticIncoming>,
-        output_topic: &'static str,
-        use_proto: bool) {
+        stats_tx: AsyncSender<StatisticIncoming>) {
             let (mut payload, addr, recv_time) = packet;
             let (partition, key, key_hash) = partition_detail;
             let key_hash = key_hash.precomputed_hash();
@@ -116,6 +79,10 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
             let notify_next = Ticket::default();
             let notify_prev = self.sender_tasks_map.insert(key_hash, notify_next.clone()).unwrap();
 
+            let producer = self.producer;
+            let output_topic = self.output_topic;
+            let use_proto = self.use_proto;
+
             spawn(async move {
                 if use_proto {
                     payload = Self::build_message(&addr,payload, &partition_detail.0).encode_to_vec();
@@ -123,11 +90,11 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
                 let mut record = FutureRecord::to(output_topic).payload(&payload).key(key.as_str());
                 record.partition=partition;
 
-                debug!("Send {} bytes with key {}",payload.len(), key);
+                debug!("{} bytes with key {} ready to be sent",payload.len(), key);
                 notify_prev.notified().await;
 
                 'send_loop: loop {
-                    match kafka_producer.send_result(record) {
+                    match producer.send_result(record) {
                         Ok(enqueuing_ok) => {
                             notify_next.notify_one();
                             match enqueuing_ok.await {
@@ -146,27 +113,5 @@ impl PacketsOrderStrategy for PacketsSortedByAddressStrategy {
                     }
                 }
             });
-    }
-}
-
-pub enum PacketsOrderStrategies {
-    NotSorted(PacketsNotSortedStrategy),
-    SortedByAddress(PacketsSortedByAddressStrategy)
-}
-
-impl PacketsOrderStrategy for PacketsOrderStrategies {
-    #[inline(always)]
-    fn send_to_kafka(
-        &mut self,
-        packet: DataPacket,
-        partition_detail: PartitionDetails,
-        kafka_producer: &'static FutureProducer,
-        stats_tx: AsyncSender<StatisticIncoming>,
-        output_topic: &'static str,
-        use_proto: bool) {
-            match self {
-                PacketsOrderStrategies::NotSorted(strategy) => strategy.send_to_kafka(packet, partition_detail, kafka_producer, stats_tx, output_topic,use_proto),
-                PacketsOrderStrategies::SortedByAddress(strategy) => strategy.send_to_kafka(packet, partition_detail, kafka_producer, stats_tx, output_topic,use_proto),
-            }
     }
 }

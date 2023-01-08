@@ -10,7 +10,7 @@ use ustr::ustr;
 use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
 use crate::{Task, statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
-use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::{PacketsOrderStrategies, PacketsNotSortedStrategy, PacketsSortedByAddressStrategy}, FlipCoinStrategy};
+use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::KafkaPacketSender, FlipCoinStrategy};
 
 #[derive(Default)]
 pub struct ServerManagerTask {
@@ -126,16 +126,6 @@ impl ServerManagerTask {
         }
     }
 
-    fn build_order_strategy(&self) -> PacketsOrderStrategies {
-        let vars = self.vars.as_ref().unwrap();
-        info!("Selected Packets Order Strategy: {}",vars.order_strategy());
-        
-        match vars.order_strategy() {
-            env_var::OrderStrategy::NotOrdered =>  PacketsOrderStrategies::NotSorted(PacketsNotSortedStrategy::default()),
-            env_var::OrderStrategy::OrderedByAddress =>  PacketsOrderStrategies::SortedByAddress(PacketsSortedByAddressStrategy::default()),
-        }
-    }
-
 }
 
 #[async_trait]
@@ -159,7 +149,8 @@ impl Task for ServerManagerTask {
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
         let checkpoint_strategy = self.build_checkpoint_strategy();
-        let order_strategy = self.build_order_strategy();
+        let kafka_sender = KafkaPacketSender::new(producer,ustr(&vars.kafka_topic),vars.use_proto);
+        
         //Define channel to send statistics update
         let (stats_tx,stats_rx) = unbounded_async();
 
@@ -174,8 +165,8 @@ impl Task for ServerManagerTask {
             shutdown_token.clone(),
             dispatcher_rx,
             stats_tx,
-            (checkpoint_strategy, partition_strategy, order_strategy),
-            (producer, ustr(&vars.kafka_topic), vars.use_proto));
+            (checkpoint_strategy, partition_strategy),
+            kafka_sender);
 
         //Schedule tasks
         let mut set = JoinSet::new();

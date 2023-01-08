@@ -6,16 +6,17 @@ edition = "2021"
 [dependencies]
 utilities = {path = "../utilities"}
 
-fastrand = "1.8.0"
-async-trait = "0.1.59"
-ahash = "0.8.2"
-ustr = "0.9.0"
-tokio = { version = "1.23.0", features = ["full"] }
-tokio-util = "0.7.4"
+fastrand = "1.8"
+async-trait = "0.1"
+ahash = "0.8"
+ustr = "0.9"
+tokio = { version = "1.24", features = ["full"] }
+tokio-util = "0.7"
 rdkafka = { version = "0.29", features = ["cmake-build","zstd-pkg-config"] }
 kanal = "0.1.0-pre7"
 derive-new = "0.5"
-nohash-hasher = "0.2.0"
+nohash-hasher = "0.2"
+once_cell = "1.17"
 prost = "0.11"
 prost-types = "0.11"
 

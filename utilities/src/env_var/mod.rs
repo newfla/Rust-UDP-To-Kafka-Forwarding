@@ -66,9 +66,6 @@ pub struct EnvVars {
     #[envconfig(from = "CHECKPOINT_STRATEGY", default="OPEN_DOORS")]
     checkpoint_strategy: String,
 
-    #[envconfig(from = "ORDER_STRATEGY", default="NOT_ORDERED")]
-    order_strategy: String,
-
     #[envconfig(from = "KAFKA_BATCH_NUM_MESSAGES", default="10000")]
     pub kafka_batch_num_messages: u32,
 
@@ -102,10 +99,6 @@ impl EnvVars {
 
     pub fn checkpoint_strategy(&self) -> CheckpointStrategy {
         CheckpointStrategy::from_str(&self.checkpoint_strategy).unwrap()
-    }
-
-    pub fn order_strategy(&self) -> OrderStrategy {
-        OrderStrategy::from_str(&self.order_strategy).unwrap()
     }
 }
 
