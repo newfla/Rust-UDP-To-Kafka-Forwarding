@@ -1,15 +1,14 @@
 use async_trait::async_trait;
-use kanal::{AsyncReceiver, AsyncSender};
+use kanal::AsyncReceiver;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, statistics::StatisticIncoming, PartitionStrategies, CheckpointStrategies, Strategies, sender::KafkaPacketSender};
+use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, PartitionStrategies, CheckpointStrategies, Strategies, sender::KafkaPacketSender};
 
 pub struct DispatcherTask {
     shutdown_token: CancellationToken,
     dispatcher_receiver: AsyncReceiver<DataPacket>,
-    stats_tx: AsyncSender<StatisticIncoming>, 
     checkpoint_strategy: CheckpointStrategies,
     partition_strategy: PartitionStrategies,
     kafka_sender: KafkaPacketSender
@@ -21,13 +20,12 @@ impl DispatcherTask {
     pub fn new (
         shutdown_token: CancellationToken,
         dispatcher_receiver: AsyncReceiver<DataPacket>,
-        stats_tx: AsyncSender<StatisticIncoming>,
         strategies: Strategies,
         kafka_sender: KafkaPacketSender) -> Self {
 
             let (checkpoint_strategy, partition_strategy) = strategies;
 
-            Self { shutdown_token, dispatcher_receiver, stats_tx, checkpoint_strategy, partition_strategy, kafka_sender}
+            Self { shutdown_token, dispatcher_receiver, checkpoint_strategy, partition_strategy, kafka_sender}
     }
 
     #[inline(always)]
@@ -36,7 +34,7 @@ impl DispatcherTask {
         if !self.checkpoint_strategy.check((&packet,&partition.0)) {
             return; 
         }
-        self.kafka_sender.send_to_kafka(packet, partition, self.stats_tx.clone());
+        self.kafka_sender.send_to_kafka(packet, partition);
     }
 }
 

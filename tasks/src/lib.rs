@@ -2,6 +2,7 @@ use std::{time::Instant, net::SocketAddr, sync::Arc};
 use ahash::AHashMap;
 use fastrand::Rng;
 use async_trait::async_trait;
+use statistics::StatisticData;
 use tokio::sync::Notify;
 use ustr::{ustr, Ustr};
 use derive_new::new;
@@ -17,6 +18,7 @@ type DataPacket = (Vec<u8>, SocketAddr, Instant);
 type PartitionDetails = (Option<i32>, Ustr, Ustr);
 type Ticket = Arc<Notify>;
 type Strategies = (CheckpointStrategies, PartitionStrategies);
+type DataTransmitted = Option<StatisticData>;
 
 #[async_trait]
 pub trait Task {

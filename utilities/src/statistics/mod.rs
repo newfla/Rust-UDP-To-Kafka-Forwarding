@@ -1,12 +1,13 @@
 
-use std::{cmp, time::{Duration, Instant}, fmt::Display, ops::Add};
+use std::{time::{Duration, Instant}, fmt::Display};
 
 use byte_unit::Byte;
 use derive_new::new;
+use nohash_hasher::IntSet;
 
 pub trait Stats {
     fn add_loss(&mut self);
-    fn add_stat(&mut self, recv_time: Instant, send_time:Instant, size: usize);
+    fn add_stat(&mut self, recv_time: Instant, send_time: Instant, size: usize, key: u64);
     fn calculate_and_reset(&mut self) -> Option<StatSummary>;
     fn calculate(&self) -> Option<StatSummary>;
     fn reset(&mut self);
@@ -20,22 +21,8 @@ pub struct StatSummary {
     min_latency: Duration,
     max_latency: Duration,
     average_latency: Duration,
-    loss_packets: usize
-}
-
-impl Add for StatSummary {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            processed_packets: self.processed_packets + rhs.processed_packets,
-            bandwidth: self.bandwidth + rhs.bandwidth,
-            min_latency: cmp::min(self.min_latency, rhs.min_latency),
-            max_latency: cmp::max(self.max_latency, rhs.max_latency),
-            average_latency: (self.average_latency + rhs.average_latency).div_f64(2.),
-            loss_packets: self.loss_packets + rhs.loss_packets,
-        }
-    }
+    loss_packets: usize,
+    unique_connections: usize
 }
 
 impl Display for StatSummary {
@@ -50,6 +37,7 @@ impl Display for StatSummary {
 
         writeln!(f,"\nPackets processed: {}",self.processed_packets).and(
             writeln!(f,"Loss packets: {}",self.loss_packets)).and(
+            writeln!(f,"Unique connections: {}",self.unique_connections)).and(
             writeln!(f,"Bandwidth: {}bit/s", bandwidth)).and(
             writeln!(f,"Latency: <min: {}, max: {}, average: {}> ms",min,max,average)
         )
@@ -62,28 +50,34 @@ pub struct StatsHolder {
     #[new(default)]
     stats_vec: Vec<StatElement>,
     #[new(default)]
-    loss_packets: usize
+    loss_packets: usize,
+    #[new(default)]
+    active_connections: IntSet<u64>
+
 }
 
 impl Default for StatsHolder {
     fn default() -> Self {
-        StatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), loss_packets: usize::default()}
+        StatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), loss_packets: usize::default(), active_connections:IntSet::default()}
     }   
 }
 
 
 impl Stats for StatsHolder {
-    fn add_stat(&mut self, recv_time: Instant, send_time:Instant, size: usize){
+    fn add_stat(&mut self, recv_time: Instant, send_time:Instant, size: usize, key:u64){
 
         let latency = send_time.duration_since(recv_time);
 
         self.stats_vec.push(StatElement{latency,size});
+
+        self.active_connections.insert(key);
 
     }
 
     fn reset(&mut self) {
         self.stats_vec.clear();
         self.loss_packets = usize::default();
+        self.active_connections.clear();
     }
 
     fn calculate(&self) -> Option<StatSummary> {
@@ -106,12 +100,15 @@ impl Stats for StatsHolder {
 
             let packet_processed = latency.len();
 
+            let unique_connections = self.active_connections.len();
+
             Some( StatSummary { processed_packets: packet_processed, 
                                 bandwidth,
                                 min_latency,
                                 max_latency,
                                 average_latency,
-                                loss_packets: self.loss_packets})
+                                loss_packets: self.loss_packets,
+                                unique_connections})
         }
     }
 
@@ -144,20 +141,25 @@ mod statistics_tests {
         let mut stats: Box<dyn Stats> = Box::new(StatsHolder::default());
         let reference = Instant::now();
 
+        stats.add_loss();
+
         stats.add_stat(
             reference,
             reference.checked_add(Duration::new(2,0)).unwrap(),
-            128);
+            128,
+            1);
 
         stats.add_stat(
             reference.checked_add(Duration::new(3,0)).unwrap(),
             reference.checked_add(Duration::new(4,0)).unwrap(),
-            128);
+            128,
+            2);
 
         stats.add_stat(
             reference.checked_add(Duration::new(4,0)).unwrap(),
             reference.checked_add(Duration::new(10,0)).unwrap(),
-            256);
+            256,
+            1);
 
         let stats_oracle = StatSummary {
             processed_packets: 3,
@@ -165,7 +167,8 @@ mod statistics_tests {
             min_latency: Duration::new(1,0),
             max_latency: Duration::new(6,0),
             average_latency: Duration::new(3,0),
-            loss_packets: 0
+            loss_packets: 1,
+            unique_connections: 2
         };
 
         let stats = stats.calculate_and_reset();

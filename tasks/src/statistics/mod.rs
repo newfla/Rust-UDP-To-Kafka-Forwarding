@@ -8,28 +8,25 @@ use tokio::{time::interval, select};
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars, statistics::{Stats,StatsHolder}};
 
-use crate::Task;
+use crate::{Task, DataTransmitted};
 
-pub enum StatisticIncoming{
-    DataTransmitted(StatisticData),
-    DataLoss
-}
 #[derive(new)]
 pub struct StatisticData {
     recv_time: Instant, 
     send_time: Instant, 
-    size: usize
+    size: usize,
+    conn_key: u64
 }
 
 pub struct StatisticsTask {
     shutdown_token: CancellationToken,
-    stats_rx: AsyncReceiver<StatisticIncoming>,
+    stats_rx: AsyncReceiver<DataTransmitted>,
     timeout: Duration,
     holder: StatsHolder
 }
 
 impl StatisticsTask {
-    pub fn new(vars: &EnvVars, shutdown_token: CancellationToken, stats_rx: AsyncReceiver<StatisticIncoming>) -> Self {
+    pub fn new(vars: &EnvVars, shutdown_token: CancellationToken, stats_rx: AsyncReceiver<DataTransmitted>) -> Self {
         let timeout = Duration::new(vars.stats_interval,0);
         let holder = StatsHolder::new(timeout);
         
@@ -58,8 +55,8 @@ impl Task for StatisticsTask {
                 stat = self.stats_rx.recv() => {
                     if let Ok(data) = stat {
                         match data {
-                            StatisticIncoming::DataTransmitted(msg) => self.holder.add_stat(msg.recv_time, msg.send_time, msg.size),
-                            StatisticIncoming::DataLoss => self.holder.add_loss(),
+                            Some(msg) => self.holder.add_stat(msg.recv_time, msg.send_time, msg.size, msg.conn_key),
+                            None => self.holder.add_loss(),
                         }
                     }
                 }

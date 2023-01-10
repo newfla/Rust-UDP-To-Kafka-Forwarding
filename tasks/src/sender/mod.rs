@@ -9,7 +9,7 @@ use ustr::Ustr;
 use utilities::logger::debug;
 use prost::Message;
 
-use crate::{statistics::{StatisticIncoming::{*, self}, StatisticData}, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket};
+use crate::{DataTransmitted, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket, statistics::StatisticData};
 
 static ONCE_PRODUCER: OnceCell<FutureProducer> = OnceCell::new();
 
@@ -22,35 +22,38 @@ pub struct KafkaPacketSender {
     producer: &'static FutureProducer,
     output_topic: &'static str,
     use_proto: bool,
-    sender_tasks_map: IntMap<u64,Ticket>
+    sender_tasks_map: IntMap<u64,Ticket>,
+    stats_tx: AsyncSender<DataTransmitted>
 }
 
 impl KafkaPacketSender{
 
-    pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool) -> Self{
+    pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool, stats_tx: AsyncSender<DataTransmitted>) -> Self{
         let producer = ONCE_PRODUCER.get_or_init(|| {kafka_producer});
         let output_topic = output_topic.as_str();
         Self {
             producer,
             output_topic,
             use_proto,
-            sender_tasks_map: IntMap::default()
+            sender_tasks_map: IntMap::default(),
+            stats_tx
         }
     }
 
     #[inline(always)]
-    async fn send_stat(stats_tx: AsyncSender<StatisticIncoming>,len: usize, recv_time: Instant) {
+    async fn send_stat(stats_tx: AsyncSender<DataTransmitted>,len: usize, recv_time: Instant, key: u64) {
         let stat = StatisticData::new(
             recv_time, 
             Instant::now(), 
-            len);
+            len,
+        key);
 
-            let _ = stats_tx.send(DataTransmitted(stat)).await;
+            let _ = stats_tx.send(Some(stat)).await;
     }
     
     #[inline(always)]
-    async fn send_data_loss(stats_tx: AsyncSender<StatisticIncoming>) {
-        let _ = stats_tx.send(DataLoss).await;
+    async fn send_data_loss(stats_tx: AsyncSender<DataTransmitted>) {
+        let _ = stats_tx.send(None).await;
     }
 
     #[inline(always)]
@@ -62,8 +65,7 @@ impl KafkaPacketSender{
     pub fn send_to_kafka(
         &mut self,
         packet: DataPacket,
-        partition_detail: PartitionDetails,
-        stats_tx: AsyncSender<StatisticIncoming>) {
+        partition_detail: PartitionDetails) {
             let (mut payload, addr, recv_time) = packet;
             let (partition, key, key_hash) = partition_detail;
             let key_hash = key_hash.precomputed_hash();
@@ -82,6 +84,7 @@ impl KafkaPacketSender{
             let producer = self.producer;
             let output_topic = self.output_topic;
             let use_proto = self.use_proto;
+            let stats_tx = self.stats_tx.clone();
 
             spawn(async move {
                 if use_proto {
@@ -99,7 +102,7 @@ impl KafkaPacketSender{
                             notify_next.notify_one();
                             match enqueuing_ok.await {
                                 Ok(_) => {
-                                    Self::send_stat(stats_tx,payload.len(),recv_time).await;
+                                    Self::send_stat(stats_tx,payload.len(),recv_time, key_hash).await;
                                 }
                                 Err(_) => {
                                     Self::send_data_loss(stats_tx).await;

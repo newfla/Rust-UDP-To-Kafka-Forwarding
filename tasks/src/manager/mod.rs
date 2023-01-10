@@ -149,11 +149,17 @@ impl Task for ServerManagerTask {
         //Define auxiliary traits for dispatcher task
         let partition_strategy = self.build_partition_strategy();
         let checkpoint_strategy = self.build_checkpoint_strategy();
-        let kafka_sender = KafkaPacketSender::new(producer,ustr(&vars.kafka_topic),vars.use_proto);
         
         //Define channel to send statistics update
         let (stats_tx,stats_rx) = unbounded_async();
 
+
+        let kafka_sender = KafkaPacketSender::new(
+            producer,
+            ustr(&vars.kafka_topic),
+            vars.use_proto,
+            stats_tx);
+        
         //Istantiate tasks
         let mut stat_task = StatisticsTask::new(vars, shutdown_token.clone(),stats_rx);
         let mut receiver_task = ReceiverTask::new( 
@@ -164,7 +170,6 @@ impl Task for ServerManagerTask {
         let mut dispatcher_task = DispatcherTask::new(
             shutdown_token.clone(),
             dispatcher_rx,
-            stats_tx,
             (checkpoint_strategy, partition_strategy),
             kafka_sender);
 
