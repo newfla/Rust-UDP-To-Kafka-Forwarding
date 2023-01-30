@@ -13,10 +13,9 @@ __'\*'__: only available when _KAFKA_PARTITION_STRATEGY_ is set to _RANDOM, ROUN
   - **LISTEN_IP**: [default = 127.0.0.1]
   - **LISTEN_PORT**:  [default = 8888]
   - **BUFFER_SIZE**: buffer size for the socket recv output [default = 1024]
-  - **STATS_INTERVAL**: Refresh interval for the statistics [default = 10]
+  - **STATS_INTERVAL**: Refresh interval (as seconds) for the statistics [default = 10]
   - **WORKER_THREADS**: Number of worker threads for the Tokio runtime [default: #CPU core]
   - **CACHE_SIZE**: Channel size between Receiver and Dispatcher task [default: 50000]
-  - **ORDER_STRATEGY**: See [Order Strategy](#Order_strategy) [default: NOT_ORDERED]
   - **KAFKA_PARTITION_STRATEGY**: See [Partition Strategy](#Partition_strategy) [default: NONE]
   - **CHECKPOINT_STRATEGY**: See [Checkpoint Strategy](#Checkpoint_strategy) [default: OPEN_DOORS]
 
@@ -38,11 +37,6 @@ __'\*'__: only available when _KAFKA_PARTITION_STRATEGY_ is set to _RANDOM, ROUN
  - **RANDOM**: assign a random partition for each packet
  - **ROUND_ROBIN**: packets are distributed over partitions using a round robin schema
  - **STICKY_ROUND_ROBIN**: packets coming from the same peer are guaranted to be sent on the same partition. Partitions are assigned to peers using a round robin schema
-
-## Order strategy
-  Define the packets ordering strategy
- - **NOT_ORDERED**: Not enforce any order
- - **ORDERED_BY_ADDRESS**: Try to force packets from the same peer to be forwarded in order of receiving time
 
 ## Checkpoint strategy
   Enforce controls over incoming UDP packets

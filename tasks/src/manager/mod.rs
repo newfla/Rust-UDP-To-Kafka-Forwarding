@@ -176,8 +176,8 @@ impl Task for ServerManagerTask {
         //Schedule tasks
         let mut set = JoinSet::new();
         set.spawn(async move {stat_task.run().await});
-        set.spawn(async move {receiver_task.run().await});
         set.spawn(async move {dispatcher_task.run().await});
+        set.spawn(async move {receiver_task.run().await});
       
         //Handle CTRL-C signal
         select! {

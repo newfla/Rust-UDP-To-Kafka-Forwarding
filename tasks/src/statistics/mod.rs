@@ -1,10 +1,9 @@
-use std::time::{Duration,Instant};
-
 use async_trait::async_trait;
 
+use coarsetime::{Instant, Duration};
 use derive_new::new;
 use kanal::AsyncReceiver;
-use tokio::{time::interval, select};
+use tokio::{time::interval_at, select};
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars, statistics::{Stats,StatsHolder}};
 
@@ -37,8 +36,9 @@ impl StatisticsTask {
 #[async_trait]
 impl Task for StatisticsTask {
     async fn run(&mut self) {
-        //Arm the timer to produce statistics at regular intervals 
-        let mut timer = interval(self.timeout);
+        //Arm the timer to produce statistics at regular intervals
+        let start = tokio::time::Instant::now() + self.timeout.into();
+        let mut timer = interval_at(start, self.timeout.into());
 
         loop  {
             select! {

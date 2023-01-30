@@ -1,13 +1,15 @@
-use std::{net::SocketAddr, time::Instant};
+use std::net::SocketAddr;
 
 use async_trait::async_trait;
+use coarsetime::Instant;
 use kanal::AsyncSender;
-use tokio::{net::UdpSocket, select};
+use tokio::net::UdpSocket;
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars};
 
 use crate::{Task, DataPacket};
 
+#[derive(Clone)]
 pub struct ReceiverTask {
     addr: SocketAddr,
     buffer_size: usize,
@@ -45,31 +47,33 @@ impl Task for ReceiverTask {
         info!("Receiver task correctly started");
 
         //Handle incoming UDP packets 
+        //We don't need to check shutdown_token.cancelled() using select!. Infact dispatcher_sender.send().is_err() => shutdown_token.cancelled() 
         loop {
-            select! {
-                _ = self.shutdown_token.cancelled() => { 
-                    info!("Shutting down receiver task");
-                }
-
-                data = socket.recv_from(&mut buf) => {
-                    match data {
-                        Err(err) => {
-                            error!("Socket recv failed. Reason: {}", err);
-                            self.shutdown_token.cancel();
-                        },
-                        Ok((len, addr)) => {
-                            debug!("Received {} bytes from {}", len, addr);
-                            //Not really unsafe :)
-                            unsafe{
-                                if self.dispatcher_sender.send((buf.get_unchecked(..len).to_vec(), addr, Instant::now())).await.is_err() {
-                                    error!("Failed to send data to dispatcher");
-                                    self.shutdown_token.cancel();
-                                }
-                            }
-                        },
+            match socket.recv_from(&mut buf).await {
+                Err(err) => {
+                    error!("Socket recv failed. Reason: {}", err);
+                    self.shutdown_token.cancel();
+                    break;
+                },
+                // Ok((len, addr)) => {
+                //     debug!("Received {} bytes from {}", len, addr);
+                //     //Not really unsafe :)
+                //     unsafe{
+                //         if self.dispatcher_sender.send((buf.get_unchecked(..len).to_vec(), addr, Instant::now())).await.is_err() {
+                //             error!("Failed to send data to dispatcher");
+                //             self.shutdown_token.cancel();
+                //             break;
+                //         }
+                //     }
+                // }
+                Ok(data) => {
+                    if self.dispatcher_sender.send((buf.clone(),data,Instant::now())).await.is_err() {
+                        error!("Failed to send data to dispatcher");
+                        self.shutdown_token.cancel();
+                        break;
                     }
                 }
-            };
+            }
         }
     }
 }

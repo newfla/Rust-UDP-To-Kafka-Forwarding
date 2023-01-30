@@ -1,4 +1,4 @@
-use std::{time::Instant, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 use ahash::AHashMap;
 use fastrand::Rng;
 use async_trait::async_trait;
@@ -6,7 +6,8 @@ use statistics::StatisticData;
 use tokio::sync::Notify;
 use ustr::{ustr, Ustr};
 use derive_new::new;
-use utilities::logger::debug;
+use utilities::{logger::debug};
+use coarsetime::Instant;
 
 mod statistics;
 mod receiver;
@@ -14,7 +15,7 @@ mod dispatcher;
 mod sender;
 pub mod manager;
 
-type DataPacket = (Vec<u8>, SocketAddr, Instant);
+type DataPacket = (Vec<u8>, (usize,SocketAddr), Instant);
 type PartitionDetails = (Option<i32>, Ustr, Ustr);
 type Ticket = Arc<Notify>;
 type Strategies = (CheckpointStrategies, PartitionStrategies);

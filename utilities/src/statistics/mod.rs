@@ -1,8 +1,9 @@
 
-use std::{time::{Duration, Instant}, fmt::Display};
+use std::fmt::Display;
+use coarsetime::{Duration, Instant};
 
 use byte_unit::Byte;
-use derive_new::new;
+pub use derive_new::new;
 use nohash_hasher::IntSet;
 
 pub trait Stats {
@@ -17,7 +18,7 @@ pub trait Stats {
 #[derive(Debug, PartialEq)]
 pub struct StatSummary {
     processed_packets: usize,
-    bandwidth: f64,
+    bandwidth: f32,
     min_latency: Duration,
     max_latency: Duration,
     average_latency: Duration,
@@ -33,10 +34,10 @@ impl Display for StatSummary {
 
         let bandwidth = self.bandwidth*8.;
         let bandwidth = Byte::from_bytes(bandwidth as u128).get_appropriate_unit(false).to_string();
-        let bandwidth =bandwidth[0..bandwidth.len()-1].to_string();
+        let bandwidth = bandwidth[0..bandwidth.len()-1].to_string();
 
         writeln!(f,"\nPackets processed: {}",self.processed_packets).and(
-            writeln!(f,"Loss packets: {}",self.loss_packets)).and(
+            writeln!(f,"Lost packets: {}",self.loss_packets)).and(
             writeln!(f,"Unique connections: {}",self.unique_connections)).and(
             writeln!(f,"Bandwidth: {}bit/s", bandwidth)).and(
             writeln!(f,"Latency: <min: {}, max: {}, average: {}> ms",min,max,average)
@@ -84,23 +85,21 @@ impl Stats for StatsHolder {
         if self.stats_vec.is_empty(){
             None
         } else {
-            let latency: Vec<Duration> = self.stats_vec.iter()
-                                                       .map(|elem| {elem.latency})
-                                                       .collect();
-
-            let min_latency = *latency.iter().min().unwrap();
-            let max_latency = *latency.iter().max().unwrap();
-            let average_latency = latency.iter().sum::<Duration>().div_f64(latency.len() as f64);
-
-            let mut bandwidth: f64 = self.stats_vec.iter()
-                                                   .map(|elem| {elem.size})
-                                                   .sum::<usize>() as f64;
-
-            bandwidth/=self.period.as_secs() as f64;
+            let latency = self.stats_vec.iter()
+                                                       .map(|elem| {elem.latency});
 
             let packet_processed = latency.len();
 
-            let unique_connections = self.active_connections.len();
+            let min_latency = latency.clone().min().unwrap();
+            let max_latency = latency.clone().max().unwrap();
+            let average_latency = latency.reduce(|acc, e| acc + e).unwrap() / packet_processed as u32;
+
+            let mut bandwidth = self.stats_vec.iter()
+                                                   .map(|elem| {elem.size})
+                                                   .sum::<usize>() as f32;
+
+            bandwidth/=self.period.as_secs() as f32;
+
 
             Some( StatSummary { processed_packets: packet_processed, 
                                 bandwidth,
@@ -108,7 +107,7 @@ impl Stats for StatsHolder {
                                 max_latency,
                                 average_latency,
                                 loss_packets: self.loss_packets,
-                                unique_connections})
+                                unique_connections: self.active_connections.len()})
         }
     }
 
@@ -120,7 +119,7 @@ impl Stats for StatsHolder {
     
     fn add_loss(&mut self) {
         self.loss_packets+=1;
-    }  
+    }
 }
 
 
@@ -132,12 +131,12 @@ struct StatElement {
 
 #[cfg(test)]
 mod statistics_tests {
-    use std::time::{Duration,Instant};
+    use coarsetime::{Duration, Instant};
 
     use crate::statistics::*;
 
     #[test]
-    fn test_simple_stats_holder(){
+    fn test_stats_holder(){
         let mut stats: Box<dyn Stats> = Box::new(StatsHolder::default());
         let reference = Instant::now();
 
@@ -145,19 +144,19 @@ mod statistics_tests {
 
         stats.add_stat(
             reference,
-            reference.checked_add(Duration::new(2,0)).unwrap(),
+            reference + Duration::new(2,0),
             128,
             1);
 
         stats.add_stat(
-            reference.checked_add(Duration::new(3,0)).unwrap(),
-            reference.checked_add(Duration::new(4,0)).unwrap(),
+            reference + Duration::new(3,0),
+            reference + Duration::new(4,0),
             128,
             2);
 
         stats.add_stat(
-            reference.checked_add(Duration::new(4,0)).unwrap(),
-            reference.checked_add(Duration::new(10,0)).unwrap(),
+            reference + Duration::new(4,0),
+            reference + Duration::new(10,0),
             256,
             1);
 

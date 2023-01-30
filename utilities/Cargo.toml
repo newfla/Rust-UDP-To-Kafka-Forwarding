@@ -9,5 +9,6 @@ simple_logger = "4.0"
 envconfig = "0.10"
 strum = { version = "0.24", features = ["derive"]}
 byte-unit = "4.0"
-derive-new = "0.5"
-nohash-hasher = "0.2"
+coarsetime= {workspace = true}
+nohash-hasher = {workspace = true}
+derive-new = {workspace = true}

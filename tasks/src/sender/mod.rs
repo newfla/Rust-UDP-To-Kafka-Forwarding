@@ -1,12 +1,13 @@
-use std::{time::Instant, net::SocketAddr};
+use std::net::SocketAddr;
 
+use coarsetime::Instant;
 use kanal::AsyncSender;
 use nohash_hasher::IntMap;
 use once_cell::sync::OnceCell;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use tokio::spawn;
 use ustr::Ustr;
-use utilities::logger::debug;
+use utilities::{logger::debug};
 use prost::Message;
 
 use crate::{DataTransmitted, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket, statistics::StatisticData};
@@ -66,7 +67,7 @@ impl KafkaPacketSender{
         &mut self,
         packet: DataPacket,
         partition_detail: PartitionDetails) {
-            let (mut payload, addr, recv_time) = packet;
+            let (mut payload, (len,addr), recv_time) = packet;
             let (partition, key, key_hash) = partition_detail;
             let key_hash = key_hash.precomputed_hash();
 
@@ -87,34 +88,46 @@ impl KafkaPacketSender{
             let stats_tx = self.stats_tx.clone();
 
             spawn(async move {
-                if use_proto {
-                    payload = Self::build_message(&addr,payload, &partition_detail.0).encode_to_vec();
-                }
-                let mut record = FutureRecord::to(output_topic).payload(&payload).key(key.as_str());
-                record.partition=partition;
+                unsafe {
+                    let payload_ref = if use_proto{
+                        payload = Self::build_message(&addr,payload.get_unchecked(..len).to_vec(), &partition_detail.0).encode_to_vec();
+                        &payload
+                    } else {
 
-                debug!("{} bytes with key {} ready to be sent",payload.len(), key);
+                        payload.get_unchecked(..len)
+                    };
+                
+                let mut record = FutureRecord { 
+                    topic: output_topic, 
+                    partition, 
+                    payload: Some(payload_ref), 
+                    key: Some(key.as_str()),
+                    timestamp: None, 
+                    headers: None };
+                
+                debug!("{} bytes with key {} ready to be sent", len, key);
                 notify_prev.notified().await;
 
-                'send_loop: loop {
+                loop {
                     match producer.send_result(record) {
                         Ok(enqueuing_ok) => {
                             notify_next.notify_one();
                             match enqueuing_ok.await {
                                 Ok(_) => {
-                                    Self::send_stat(stats_tx,payload.len(),recv_time, key_hash).await;
+                                    Self::send_stat(stats_tx, len, recv_time, key_hash).await;
                                 }
                                 Err(_) => {
                                     Self::send_data_loss(stats_tx).await;
                                 }
                             }
-                            break 'send_loop;
+                            break;
                         }
                         Err((_,rec)) => {
                             record = rec;
                         }
                     }
                 }
+            }
             });
     }
 }
