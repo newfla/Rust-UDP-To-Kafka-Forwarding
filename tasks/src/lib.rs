@@ -1,7 +1,8 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 use ahash::AHashMap;
 use fastrand::Rng;
 use async_trait::async_trait;
+use rclite::Arc;
 use statistics::StatisticData;
 use tokio::sync::Notify;
 use ustr::{ustr, Ustr};
