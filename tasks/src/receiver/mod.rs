@@ -3,9 +3,11 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use coarsetime::Instant;
 use kanal::AsyncSender;
-use tokio::net::UdpSocket;
+use tokio::{net::UdpSocket, select, spawn};
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars};
+use tokio_dtls_stream_sink::{Server, Session};
+use openssl::ssl::{SslContext, SslFiletype, SslMethod};
 
 use crate::{Task, DataPacket};
 
@@ -14,14 +16,16 @@ pub struct ReceiverTask {
     addr: SocketAddr,
     buffer_size: usize,
     dispatcher_sender: AsyncSender<DataPacket>,
-    shutdown_token: CancellationToken
+    shutdown_token: CancellationToken,
+    dtls_settings: (bool, Option<String>,Option<String>)
 }
 
 impl ReceiverTask {
     pub fn new(dispatcher: AsyncSender<DataPacket>, shutdown_token: CancellationToken, vars: &EnvVars) -> Self {
             let addr = Self::build_socket_from_env(vars);
             let buffer_size = vars.buffer_size;
-            Self {addr, dispatcher_sender: dispatcher, shutdown_token, buffer_size}
+            let dtls_settings = (vars.use_dtls,vars.server_cert.clone(),vars.server_key.clone());
+            Self {addr, dispatcher_sender: dispatcher, shutdown_token, buffer_size,dtls_settings}
     }
 
     fn build_socket_from_env(vars: &EnvVars) -> SocketAddr {
@@ -29,22 +33,16 @@ impl ReceiverTask {
         let port = vars.listen_port.to_string();
         (ip + ":" +&port).parse().unwrap()
     }
-}
 
-#[async_trait]
-impl Task for ReceiverTask {
-    async fn run(&mut self) {
-        //Socket binding handling 
-        let socket = UdpSocket::bind(self.addr).await;
-        if let Err(err)= socket {
-            error!("Socket binding failed. Reaseon: {}",err);
-            self.shutdown_token.cancel();
-            return;
-        }
+    async fn error_run(&mut self){
+        error!("Key AND/OR Certificate for TLS were not provided");
+        debug!("Certificate: {:?}", self.dtls_settings.1);
+        debug!("Key: {:?}", self.dtls_settings.2);
+        self.shutdown_token.cancel();
+    }
 
-        let socket = socket.unwrap();
+    async fn plain_run(&mut self, socket:UdpSocket){
         let mut buf = vec![0u8; self.buffer_size];
-        info!("Receiver task correctly started");
 
         //Handle incoming UDP packets 
         //We don't need to check shutdown_token.cancelled() using select!. Infact dispatcher_sender.send().is_err() => shutdown_token.cancelled() 
@@ -55,25 +53,112 @@ impl Task for ReceiverTask {
                     self.shutdown_token.cancel();
                     break;
                 },
-                // Ok((len, addr)) => {
-                //     debug!("Received {} bytes from {}", len, addr);
-                //     //Not really unsafe :)
-                //     unsafe{
-                //         if self.dispatcher_sender.send((buf.get_unchecked(..len).to_vec(), addr, Instant::now())).await.is_err() {
-                //             error!("Failed to send data to dispatcher");
-                //             self.shutdown_token.cancel();
-                //             break;
-                //         }
-                //     }
-                // }
                 Ok(data) => {
                     if self.dispatcher_sender.send((buf.clone(),data,Instant::now())).await.is_err() {
                         error!("Failed to send data to dispatcher");
+                        info!("Shutting down receiver task");
                         self.shutdown_token.cancel();
                         break;
                     }
                 }
             }
         }
+    }
+
+    async fn dtls_run(&mut self, socket:UdpSocket, cert:String, key:String){
+        let mut server = Server::new(socket);
+        match Self::build_ssl_context(cert,key) {
+            Err(_) => {
+                info!("Shutting down receiver task");
+                self.shutdown_token.cancel();
+            },
+
+            Ok(ctx) => {
+                loop {
+                    select! {
+                        _ = self.shutdown_token.cancelled() => { 
+                            info!("Shutting down receiver task");
+                            break;
+                        }
+                        //Accept new DTLS connections (handshake phase)
+                        session = server.accept(Some(&ctx)) => {
+                            if let Ok(session) = session {
+                                self.handle_dtls_session(session)
+                            }
+                        }
+                    }
+                }
+            }
+        } 
+    }
+
+    fn handle_dtls_session(&mut self, mut session:Session){
+        let dispatcher_sender= self.dispatcher_sender.clone();
+        let shutdown_token= self.shutdown_token.clone();
+
+        let mut buf = vec![0u8; self.buffer_size];
+        let peer = session.peer();
+        spawn(async move {
+            //Handle incoming UDP packets for each peer
+            //session.read.is_err() => closed connection
+            //We don't need to check shutdown_token.cancelled() using select!. Infact dispatcher_sender.send().is_err() => shutdown_token.cancelled() 
+            loop {
+                select! {
+                    _ = shutdown_token.cancelled() => {
+                        break;
+                    }
+                    res = session.read(&mut buf) => match res {
+                        Err(err) => {
+                            error!("Peer connection closed. Reason: {}", err);
+                            break;
+                        },
+                        Ok(len) => {
+                            if dispatcher_sender.send((buf.clone(),(len,peer),Instant::now())).await.is_err() {
+                                error!("Failed to send data to dispatcher");
+                                shutdown_token.cancel();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    fn build_ssl_context(cert:String, key:String) -> Result<SslContext,()> {
+        let mut ctx = SslContext::builder(SslMethod::dtls()).unwrap();
+
+        let setup_context = ctx.set_private_key_file(key, SslFiletype::PEM)
+            .and_then(|_| ctx.set_certificate_chain_file(cert))
+            .and_then(|_| ctx.check_private_key());
+        
+        match setup_context {
+            Ok(_) => Ok(ctx.build()),
+            Err(_) => {
+                error!("Something is wrong with certificate AND/OR key file(s)");
+                Err(())
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl Task for ReceiverTask {
+    async fn run(&mut self) {
+        //Socket binding handling 
+        let socket = UdpSocket::bind(self.addr).await;
+        if let Err(err)= socket {
+            error!("Socket binding failed. Reaseon: {}", err);
+            self.shutdown_token.cancel();
+            return;
+        }
+
+        let socket = socket.unwrap();
+        match &self.dtls_settings {
+            (false, _, _) => self.plain_run(socket).await,
+            (true, Some(cert), Some(key)) => self.dtls_run(socket, cert.to_owned(), key.to_owned()).await,
+            (true,_,_) =>self.error_run().await
+        }
+        
     }
 }

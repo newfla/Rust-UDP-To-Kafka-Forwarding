@@ -42,6 +42,15 @@ pub struct EnvVars {
     #[envconfig(from = "LISTEN_PORT", default="8888")]
     pub listen_port: u16,
 
+    #[envconfig(from = "USE_DTLS", default="false")]
+    pub use_dtls: bool,
+
+    #[envconfig(from = "SERVER_KEY")]
+    pub server_key: Option<String>,
+
+    #[envconfig(from = "SERVER_CERT")]
+    pub server_cert: Option<String>,
+
     #[envconfig(from = "BUFFER_SIZE", default="1024")]
     pub buffer_size: usize,
 
@@ -89,7 +98,6 @@ pub struct EnvVars {
 
     #[envconfig(from = "USE_PROTO", default="false")]
     pub use_proto: bool,
-
 }
 
 impl EnvVars {

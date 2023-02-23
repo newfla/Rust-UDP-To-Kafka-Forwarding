@@ -1,6 +1,6 @@
 # Rust-UDP-To-Kafka-Forwarding
 
-A simple UDP async server based on [Tokio framework](https://https://tokio.rs) that forwards packets to [Apache Kafka](https://kafka.apache.org/).
+A simple UDP and DTLS async server based on [Tokio framework](https://https://tokio.rs) that forwards packets to [Apache Kafka](https://kafka.apache.org/).
 
 Each UDP datagram is forwarded to kafka with an header containing :
 - Source IP and PORT of udp packet
@@ -12,6 +12,9 @@ __'\*'__: only available when _KAFKA_PARTITION_STRATEGY_ is set to _RANDOM, ROUN
 ### Server Side:
   - **LISTEN_IP**: [default = 127.0.0.1]
   - **LISTEN_PORT**:  [default = 8888]
+  - **USE_DTLS**: [default = false],
+  - **SERVER_KEY**: path to the private key for TLS encryption (PEM format)
+  - **SERVER_CERT**: path to the certificate or certificate chain used by the server (PEM format)
   - **BUFFER_SIZE**: buffer size for the socket recv output [default = 1024]
   - **STATS_INTERVAL**: Refresh interval (as seconds) for the statistics [default = 10]
   - **WORKER_THREADS**: Number of worker threads for the Tokio runtime [default: #CPU core]

@@ -3,16 +3,15 @@ use std::net::SocketAddr;
 use coarsetime::Instant;
 use kanal::AsyncSender;
 use nohash_hasher::IntMap;
-use once_cell::sync::OnceCell;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use tokio::spawn;
+use tokio::{spawn, sync::OnceCell};
 use ustr::Ustr;
 use utilities::{logger::debug};
 use prost::Message;
 
 use crate::{DataTransmitted, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket, statistics::StatisticData};
 
-static ONCE_PRODUCER: OnceCell<FutureProducer> = OnceCell::new();
+static ONCE_PRODUCER: OnceCell<FutureProducer> = OnceCell::const_new();
 
 // Include the `items` module, which is generated from items.proto.
 pub mod proto {
@@ -30,10 +29,10 @@ pub struct KafkaPacketSender {
 impl KafkaPacketSender{
 
     pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool, stats_tx: AsyncSender<DataTransmitted>) -> Self{
-        let producer = ONCE_PRODUCER.get_or_init(|| {kafka_producer});
+        let _ =ONCE_PRODUCER.set(kafka_producer);
         let output_topic = output_topic.as_str();
         Self {
-            producer,
+            producer: ONCE_PRODUCER.get().unwrap(),
             output_topic,
             use_proto,
             sender_tasks_map: IntMap::default(),
@@ -47,7 +46,7 @@ impl KafkaPacketSender{
             recv_time, 
             Instant::now(), 
             len,
-        key);
+            key);
 
             let _ = stats_tx.send(Some(stat)).await;
     }

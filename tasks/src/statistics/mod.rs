@@ -44,6 +44,7 @@ impl Task for StatisticsTask {
             select! {
                 _ = self.shutdown_token.cancelled() => {
                     info!("Shutting down statistics task");
+                    break
                 }
                 _ = timer.tick() => {
                     if let Some(summary) = self.holder.calculate_and_reset() {
