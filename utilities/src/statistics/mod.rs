@@ -17,12 +17,11 @@ pub trait Stats {
 
 #[derive(Debug, PartialEq)]
 pub struct StatSummary {
-    processed_packets: usize,
     bandwidth: f32,
     min_latency: Duration,
     max_latency: Duration,
     average_latency: Duration,
-    loss_packets: usize,
+    lost_packets: usize,
     unique_connections: usize
 }
 
@@ -34,13 +33,12 @@ impl Display for StatSummary {
 
         let bandwidth = self.bandwidth*8.;
         let bandwidth = Byte::from_bytes(bandwidth as u128).get_appropriate_unit(false).to_string();
-        let bandwidth = bandwidth[0..bandwidth.len()-1].to_string();
+        let bandwidth = &bandwidth[0..bandwidth.len()-1];
 
-        writeln!(f,"\nPackets processed: {}",self.processed_packets).and(
-            writeln!(f,"Lost packets: {}",self.loss_packets)).and(
-            writeln!(f,"Unique connections: {}",self.unique_connections)).and(
-            writeln!(f,"Bandwidth: {}bit/s", bandwidth)).and(
-            writeln!(f,"Latency: <min: {}, max: {}, average: {}> ms",min,max,average)
+        writeln!(f,"\nLost packets: {}", self.lost_packets).and(
+        writeln!(f,"Unique connections: {}", self.unique_connections)).and(
+        writeln!(f,"Bandwidth: {bandwidth}bit/s")).and(
+        writeln!(f,"Latency: <min: {min}, max: {max}, average: {average}> ms")
         )
     }
 }
@@ -51,7 +49,7 @@ pub struct StatsHolder {
     #[new(default)]
     stats_vec: Vec<StatElement>,
     #[new(default)]
-    loss_packets: usize,
+    lost_packets: usize,
     #[new(default)]
     active_connections: IntSet<u64>
 
@@ -59,7 +57,7 @@ pub struct StatsHolder {
 
 impl Default for StatsHolder {
     fn default() -> Self {
-        StatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), loss_packets: usize::default(), active_connections:IntSet::default()}
+        StatsHolder { period: Duration::new(10,0), stats_vec: Vec::default(), lost_packets: usize::default(), active_connections:IntSet::default()}
     }   
 }
 
@@ -77,38 +75,37 @@ impl Stats for StatsHolder {
 
     fn reset(&mut self) {
         self.stats_vec.clear();
-        self.loss_packets = usize::default();
+        self.lost_packets = usize::default();
         self.active_connections.clear();
     }
 
     fn calculate(&self) -> Option<StatSummary> {
         if self.stats_vec.is_empty(){
-            None
-        } else {
-            let latency = self.stats_vec.iter()
-                                                       .map(|elem| {elem.latency});
-
-            let packet_processed = latency.len();
-
-            let min_latency = latency.clone().min().unwrap();
-            let max_latency = latency.clone().max().unwrap();
-            let average_latency = latency.reduce(|acc, e| acc + e).unwrap() / packet_processed as u32;
-
-            let mut bandwidth = self.stats_vec.iter()
-                                                   .map(|elem| {elem.size})
-                                                   .sum::<usize>() as f32;
-
-            bandwidth/=self.period.as_secs() as f32;
-
-
-            Some( StatSummary { processed_packets: packet_processed, 
-                                bandwidth,
-                                min_latency,
-                                max_latency,
-                                average_latency,
-                                loss_packets: self.loss_packets,
-                                unique_connections: self.active_connections.len()})
+            return None
         }
+
+        let latency = self.stats_vec.iter()
+                                                    .map(|elem| {elem.latency});
+
+        let packet_processed = latency.len();
+
+        let min_latency = latency.clone().min().unwrap();
+        let max_latency = latency.clone().max().unwrap();
+        let average_latency = latency.reduce(|acc, e| acc + e).unwrap() / packet_processed as u32;
+
+        let mut bandwidth = self.stats_vec.iter()
+                                                .map(|elem| {elem.size})
+                                                .sum::<usize>() as f32;
+
+        bandwidth /= self.period.as_secs() as f32;
+
+
+        Some( StatSummary { bandwidth,
+                            min_latency,
+                            max_latency,
+                            average_latency,
+                            lost_packets: self.lost_packets,
+                            unique_connections: self.active_connections.len()})
     }
 
     fn calculate_and_reset(&mut self) -> Option<StatSummary> {
@@ -118,7 +115,7 @@ impl Stats for StatsHolder {
     }
     
     fn add_loss(&mut self) {
-        self.loss_packets+=1;
+        self.lost_packets += 1;
     }
 }
 
@@ -161,12 +158,11 @@ mod statistics_tests {
             1);
 
         let stats_oracle = StatSummary {
-            processed_packets: 3,
             bandwidth:512. / 10.,
             min_latency: Duration::new(1,0),
             max_latency: Duration::new(6,0),
             average_latency: Duration::new(3,0),
-            loss_packets: 1,
+            lost_packets: 1,
             unique_connections: 2
         };
 

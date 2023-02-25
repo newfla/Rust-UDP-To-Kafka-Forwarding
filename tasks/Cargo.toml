@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 utilities = {path = "../utilities"}
 
-fastrand = "1.8"
+fastrand = "1.9"
 async-trait = "0.1"
 ahash = "0.8"
 ustr = "0.9"

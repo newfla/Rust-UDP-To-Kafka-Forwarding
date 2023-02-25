@@ -81,10 +81,8 @@ impl ReceiverTask {
                             break;
                         }
                         //Accept new DTLS connections (handshake phase)
-                        session = server.accept(Some(&ctx)) => {
-                            if let Ok(session) = session {
-                                self.handle_dtls_session(session)
-                            }
+                        session = server.accept(Some(&ctx)) => if let Ok(session) = session {
+                            self.handle_dtls_session(session)
                         }
                     }
                 }
@@ -104,9 +102,7 @@ impl ReceiverTask {
             //We don't need to check shutdown_token.cancelled() using select!. Infact dispatcher_sender.send().is_err() => shutdown_token.cancelled() 
             loop {
                 select! {
-                    _ = shutdown_token.cancelled() => {
-                        break;
-                    }
+                    _ = shutdown_token.cancelled() => break,
                     res = session.read(&mut buf) => match res {
                         Err(err) => {
                             error!("Peer connection closed. Reason: {}", err);
@@ -159,6 +155,5 @@ impl Task for ReceiverTask {
             (true, Some(cert), Some(key)) => self.dtls_run(socket, cert.to_owned(), key.to_owned()).await,
             (true,_,_) =>self.error_run().await
         }
-        
     }
 }

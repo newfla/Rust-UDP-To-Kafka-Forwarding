@@ -88,13 +88,11 @@ impl KafkaPacketSender{
 
             spawn(async move {
                 unsafe {
-                    let payload_ref = if use_proto{
-                        payload = Self::build_message(&addr,payload.get_unchecked(..len).to_vec(), &partition_detail.0).encode_to_vec();
-                        &payload
-                    } else {
-
-                        payload.get_unchecked(..len)
-                    };
+                    let mut payload_ref = payload.get_unchecked(..len);
+                    if use_proto {
+                        payload = Self::build_message(&addr,payload_ref.to_vec(), &partition_detail.0).encode_to_vec();
+                        payload_ref = &payload
+                    }
                 
                 let mut record = FutureRecord { 
                     topic: output_topic, 
@@ -112,21 +110,15 @@ impl KafkaPacketSender{
                         Ok(enqueuing_ok) => {
                             notify_next.notify_one();
                             match enqueuing_ok.await {
-                                Ok(_) => {
-                                    Self::send_stat(stats_tx, len, recv_time, key_hash).await;
-                                }
-                                Err(_) => {
-                                    Self::send_data_loss(stats_tx).await;
-                                }
+                                Ok(_) => Self::send_stat(stats_tx, len, recv_time, key_hash).await,
+                                Err(_) => Self::send_data_loss(stats_tx).await
                             }
                             break;
                         }
-                        Err((_,rec)) => {
-                            record = rec;
-                        }
+                        Err((_,rec)) => record = rec
                     }
                 }
             }
-            });
+        });
     }
 }
