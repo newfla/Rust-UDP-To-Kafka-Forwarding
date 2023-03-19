@@ -22,6 +22,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 coarsetime= {workspace = true}
 nohash-hasher = {workspace = true}
 derive-new = {workspace = true}
+branches = {workspace = true}
 
 [build-dependencies]
 prost-build = "0.11"

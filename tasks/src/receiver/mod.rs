@@ -1,9 +1,10 @@
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
+use branches::unlikely;
 use coarsetime::Instant;
 use kanal::AsyncSender;
-use tokio::{net::UdpSocket, select, spawn};
+use tokio::{net::UdpSocket, select, spawn, io};
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars};
 use tokio_dtls_stream_sink::{Server, Session};
@@ -42,19 +43,24 @@ impl ReceiverTask {
     }
 
     async fn plain_run(&mut self, socket:UdpSocket){
-        let mut buf = vec![0u8; self.buffer_size];
 
         //Handle incoming UDP packets 
-        //We don't need to check shutdown_token.cancelled() using select!. Infact dispatcher_sender.send().is_err() => shutdown_token.cancelled() 
+        //We don't need to check shutdown_token.cancelled() using select!. Infact, dispatcher_sender.send().is_err() <=> shutdown_token.cancelled() 
         loop {
-            match socket.recv_from(&mut buf).await {
+            let mut buf  = Vec::with_capacity(self.buffer_size);
+            let _ = socket.readable().await;
+
+            match socket.try_recv_buf_from(&mut buf) {
+                Err(ref e) if unlikely(e.kind() == io::ErrorKind::WouldBlock) => {
+                    continue;
+                },
                 Err(err) => {
                     error!("Socket recv failed. Reason: {}", err);
                     self.shutdown_token.cancel();
                     break;
                 },
                 Ok(data) => {
-                    if self.dispatcher_sender.send((buf.clone(),data,Instant::now())).await.is_err() {
+                    if unlikely(self.dispatcher_sender.send((buf,data,Instant::now())).await.is_err()) {
                         error!("Failed to send data to dispatcher");
                         info!("Shutting down receiver task");
                         self.shutdown_token.cancel();
@@ -109,7 +115,7 @@ impl ReceiverTask {
                             break;
                         },
                         Ok(len) => {
-                            if dispatcher_sender.send((buf.clone(),(len,peer),Instant::now())).await.is_err() {
+                            if unlikely(dispatcher_sender.send((buf.clone(),(len,peer),Instant::now())).await.is_err()) {
                                 error!("Failed to send data to dispatcher");
                                 shutdown_token.cancel();
                                 break;
@@ -143,7 +149,7 @@ impl Task for ReceiverTask {
     async fn run(&mut self) {
         //Socket binding handling 
         let socket = UdpSocket::bind(self.addr).await;
-        if let Err(err)= socket {
+        if let Err(err) = socket {
             error!("Socket binding failed. Reaseon: {}", err);
             self.shutdown_token.cancel();
             return;

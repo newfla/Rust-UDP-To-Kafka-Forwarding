@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use branches::unlikely;
 use coarsetime::Instant;
 use kanal::AsyncSender;
 use nohash_hasher::IntMap;
@@ -70,7 +71,7 @@ impl KafkaPacketSender{
             let (partition, key, key_hash) = partition_detail;
             let key_hash = key_hash.precomputed_hash();
 
-            if self.sender_tasks_map.get(&key_hash).is_none() {
+            if unlikely(self.sender_tasks_map.get(&key_hash).is_none()) {
                 //Notify from fake previous task
                 let fake_notify = Ticket::default();
                 let _ = self.sender_tasks_map.insert(key_hash, fake_notify.clone());

@@ -9,6 +9,7 @@ edition = "2021"
 coarsetime = "0.1"
 derive-new = "0.5"
 nohash-hasher = "0.2"
+branches = "0.1"
 
 [dependencies]
 utilities = {path = "utilities"}

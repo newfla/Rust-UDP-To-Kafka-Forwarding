@@ -1,7 +1,7 @@
 
 use std::fmt::Display;
 use coarsetime::{Duration, Instant};
-
+use branches::unlikely;
 use byte_unit::Byte;
 pub use derive_new::new;
 use nohash_hasher::IntSet;
@@ -80,7 +80,7 @@ impl Stats for StatsHolder {
     }
 
     fn calculate(&self) -> Option<StatSummary> {
-        if self.stats_vec.is_empty(){
+        if unlikely(self.stats_vec.is_empty()){
             return None
         }
 
