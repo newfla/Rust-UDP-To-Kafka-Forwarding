@@ -30,7 +30,7 @@ pub struct KafkaPacketSender {
 impl KafkaPacketSender{
 
     pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool, stats_tx: AsyncSender<DataTransmitted>) -> Self{
-        let _ =ONCE_PRODUCER.set(kafka_producer);
+        let _ = ONCE_PRODUCER.set(kafka_producer);
         let output_topic = output_topic.as_str();
         Self {
             producer: ONCE_PRODUCER.get().unwrap(),

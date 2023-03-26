@@ -5,6 +5,8 @@ use branches::unlikely;
 use byte_unit::Byte;
 pub use derive_new::new;
 use nohash_hasher::IntSet;
+use itertools::Itertools;
+use itertools::MinMaxResult::{NoElements, OneElement, MinMax};
 
 pub trait Stats {
     fn add_loss(&mut self);
@@ -88,10 +90,16 @@ impl Stats for StatsHolder {
                                                     .map(|elem| {elem.latency});
 
         let packet_processed = latency.len();
+        
+        let (min_latency, max_latency) = match latency.clone().minmax(){
+            NoElements => (Duration::new(0, 0),Duration::new(0, 0)),
+            OneElement(elem) => (elem,elem),
+            MinMax(min, max) =>(min,max),
+        };
 
-        let min_latency = latency.clone().min().unwrap();
-        let max_latency = latency.clone().max().unwrap();
-        let average_latency = latency.reduce(|acc, e| acc + e).unwrap() / packet_processed as u32;
+
+
+        let average_latency = latency.fold(Duration::new(0, 0),|acc, e| acc + e) / packet_processed as u32;
 
         let mut bandwidth = self.stats_vec.iter()
                                                 .map(|elem| {elem.size})
