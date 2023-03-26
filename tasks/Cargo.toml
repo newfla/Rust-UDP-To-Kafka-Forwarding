@@ -8,7 +8,6 @@ utilities = {path = "../utilities"}
 
 fastrand = "1.9"
 async-trait = "0.1"
-ahash = "0.8"
 ustr = "0.9"
 tokio = { version = "1.2", features = ["full"] }
 tokio-util = "0.7"
@@ -19,6 +18,7 @@ prost = "0.11"
 prost-types = "0.11"
 tokio-dtls-stream-sink = "0.6"
 openssl = { version = "0.10", features = ["vendored"] }
+cached = "0.42"
 coarsetime= {workspace = true}
 nohash-hasher = {workspace = true}
 derive-new = {workspace = true}

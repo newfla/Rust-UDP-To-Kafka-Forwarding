@@ -7,7 +7,7 @@ use nohash_hasher::IntMap;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use tokio::{spawn, sync::OnceCell};
 use ustr::Ustr;
-use utilities::{logger::debug};
+use utilities::logger::debug;
 use prost::Message;
 
 use crate::{DataTransmitted, DataPacket, PartitionDetails,sender::proto::KafkaMessage, Ticket, statistics::StatisticData};
@@ -30,7 +30,7 @@ pub struct KafkaPacketSender {
 impl KafkaPacketSender{
 
     pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool, stats_tx: AsyncSender<DataTransmitted>) -> Self{
-        let _ = ONCE_PRODUCER.set(kafka_producer);
+        let _ =ONCE_PRODUCER.set(kafka_producer);
         let output_topic = output_topic.as_str();
         Self {
             producer: ONCE_PRODUCER.get().unwrap(),

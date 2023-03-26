@@ -9,8 +9,8 @@ use tokio_util::sync::CancellationToken;
 use ustr::ustr;
 use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
-use crate::{Task, statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::{DispatcherTask}, NonePartitionStrategy, RandomPartitionStrategy, RoundRobinPartitionStrategy, StickyRoundRobinPartitionStrategy};
-use crate::{PartitionStrategies::{*, self}, CheckpointStrategies, OpenDoorsStrategy, ClosedDoorsStrategy, sender::KafkaPacketSender, FlipCoinStrategy};
+use crate::{Task, statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::DispatcherTask, sender::KafkaPacketSender};
+use crate::{PartitionStrategies::{*, self}, CheckpointStrategies};
 
 #[derive(Default)]
 pub struct ServerManagerTask {
@@ -108,9 +108,9 @@ impl ServerManagerTask {
         info!("Selected Checkpoint Strategy: {}",vars.checkpoint_strategy());
         
         match vars.checkpoint_strategy() {
-            env_var::CheckpointStrategy::OpenDoors =>  CheckpointStrategies::OpenDoors(OpenDoorsStrategy::default()),
-            env_var::CheckpointStrategy::ClosedDoors =>  CheckpointStrategies::ClosedDoors(ClosedDoorsStrategy::default()),
-            env_var::CheckpointStrategy::FlipCoin =>  CheckpointStrategies::FlipCoin(FlipCoinStrategy::default()),
+            env_var::CheckpointStrategy::OpenDoors =>  CheckpointStrategies::OpenDoors,
+            env_var::CheckpointStrategy::ClosedDoors =>  CheckpointStrategies::ClosedDoors,
+            env_var::CheckpointStrategy::FlipCoin =>  CheckpointStrategies::FlipCoin,
         }
     }
 
@@ -119,10 +119,10 @@ impl ServerManagerTask {
         info!("Selected Partion Strategy: {}",vars.kafka_partition_strategy());
         
         match vars.kafka_partition_strategy() {
-            env_var::PartitionStrategy::None =>  NonePartition(NonePartitionStrategy::default()),
-            env_var::PartitionStrategy::Random => RandomPartition(RandomPartitionStrategy::new(self.kafka_num_partitions)),
-            env_var::PartitionStrategy::RoundRobin => RoundRobinPartition(RoundRobinPartitionStrategy::new(self.kafka_num_partitions)),
-            env_var::PartitionStrategy::StickyRoundRobin => StickyRoundRobinPartition(StickyRoundRobinPartitionStrategy::new(self.kafka_num_partitions)),
+            env_var::PartitionStrategy::None =>  NonePartition,
+            env_var::PartitionStrategy::Random => PartitionStrategies::new_random_partition(self.kafka_num_partitions),
+            env_var::PartitionStrategy::RoundRobin => PartitionStrategies::new_round_robin_partition(self.kafka_num_partitions),
+            env_var::PartitionStrategy::StickyRoundRobin => PartitionStrategies::new_sticky_round_robin_partition(self.kafka_num_partitions)
         }
     }
 
