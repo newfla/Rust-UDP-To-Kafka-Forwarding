@@ -1,8 +1,7 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 use cached::proc_macro::cached;
 use fastrand::Rng;
 use async_trait::async_trait;
-use rclite::Arc;
 use statistics::StatisticData;
 use tokio::sync::Notify;
 use ustr::{ustr, Ustr};
@@ -95,7 +94,6 @@ fn sticky_partition_internal(addr: &SocketAddr, next: i32) -> PartitionDetails {
 
     val
 }
-
 
 pub trait CheckpointStrategy {
     fn check(&self, data: (&DataPacket,&Option<i32>)) -> bool;

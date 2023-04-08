@@ -13,7 +13,6 @@ tokio = { version = "1.2", features = ["full"] }
 tokio-util = "0.7"
 rdkafka = { version = "0.29", features = ["cmake-build","zstd-pkg-config"] }
 kanal = "0.1.0-pre8"
-rclite = "0.2"
 prost = "0.11"
 prost-types = "0.11"
 tokio-dtls-stream-sink = "0.6"
