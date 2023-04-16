@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::{Arc, atomic::{AtomicI32, Ordering}}};
 use cached::proc_macro::cached;
 use fastrand::Rng;
 use async_trait::async_trait;
@@ -34,8 +34,8 @@ pub trait PartitionStrategy {
 pub enum PartitionStrategies {
     NonePartition,
     RandomPartition{#[new(default)]  rng: Rng, num_partitions: i32},
-    RoundRobinPartition{#[new(value = "fastrand::i32(0..num_partitions)")] start_partition: i32, num_partitions: i32},
-    StickyRoundRobinPartition {#[new(value = "fastrand::i32(0..num_partitions)")] start_partition: i32, num_partitions: i32}
+    RoundRobinPartition{#[new(value = "AtomicI32::new(fastrand::i32(0..num_partitions))")] start_partition: AtomicI32, num_partitions: i32},
+    StickyRoundRobinPartition {#[new(value = "AtomicI32::new(fastrand::i32(0..num_partitions))")] start_partition: AtomicI32, num_partitions: i32}
 }
 
 impl PartitionStrategy for PartitionStrategies {
@@ -50,7 +50,7 @@ impl PartitionStrategy for PartitionStrategies {
     }
 }
 
-#[cached(key = "SocketAddr", convert = r#"{ *addr }"#)]
+#[cached(key = "SocketAddr", convert = r#"{ *addr }"#, sync_writes = true)]
 fn none_partition(addr: &SocketAddr) -> PartitionDetails {
     let key = ustr(&(addr.to_string()+"|auto"));
     (None, key,key)
@@ -65,9 +65,8 @@ fn random_partition(addr: &SocketAddr, num_partitions: i32, rng: &Rng) -> Partit
     (Some(next),key,order_key)
 }
 
-fn round_robin_partition(addr: &SocketAddr, start_partition: &mut i32, num_partitions: i32) -> PartitionDetails {
-    let next = (*start_partition + 1) % num_partitions;
-    *start_partition = next;
+fn round_robin_partition(addr: &SocketAddr, start_partition: &AtomicI32, num_partitions: i32) -> PartitionDetails {
+    let next = start_partition.fetch_add(1, Ordering::SeqCst) % num_partitions;
 
     debug!("SockAddr: {} partition: {}",addr, next);
 
@@ -78,15 +77,11 @@ fn round_robin_partition(addr: &SocketAddr, start_partition: &mut i32, num_parti
     (Some(next),key,order_key)
 }
 
-fn sticky_partition(addr: &SocketAddr, start_partition: &mut i32, num_partitions: i32) -> PartitionDetails {
-    let next = (*start_partition + 1) % num_partitions;
-    *start_partition = next;
+#[cached(key = "SocketAddr", convert = r#"{ *addr }"#, sync_writes = true)]
+fn sticky_partition(addr: &SocketAddr, start_partition: &AtomicI32, num_partitions: i32) -> PartitionDetails {
+    
+    let next = start_partition.fetch_add(1, Ordering::SeqCst) % num_partitions;
 
-    sticky_partition_internal(addr, next)
-}
-
-#[cached(key = "SocketAddr", convert = r#"{ *addr }"#)]
-fn sticky_partition_internal(addr: &SocketAddr, next: i32) -> PartitionDetails {
     let key = ustr(&(addr.to_string() +"|"+ &next.to_string()));
     let val = (Some(next),key,key);
 

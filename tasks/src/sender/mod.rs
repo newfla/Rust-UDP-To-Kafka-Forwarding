@@ -30,7 +30,7 @@ pub struct KafkaPacketSender {
 impl KafkaPacketSender{
 
     pub fn new (kafka_producer: FutureProducer, output_topic: Ustr,use_proto: bool, stats_tx: AsyncSender<DataTransmitted>) -> Self{
-        let _ =ONCE_PRODUCER.set(kafka_producer);
+        let _ = ONCE_PRODUCER.set(kafka_producer);
         let output_topic = output_topic.as_str();
         Self {
             producer: ONCE_PRODUCER.get().unwrap(),
@@ -71,7 +71,7 @@ impl KafkaPacketSender{
             let (partition, key, key_hash) = partition_detail;
             let key_hash = key_hash.precomputed_hash();
 
-            if unlikely(self.sender_tasks_map.get(&key_hash).is_none()) {
+            if unlikely(!self.sender_tasks_map.contains_key(&key_hash)) {
                 //Notify from fake previous task
                 let fake_notify = Ticket::default();
                 let _ = self.sender_tasks_map.insert(key_hash, fake_notify.clone());
