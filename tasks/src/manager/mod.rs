@@ -1,7 +1,6 @@
 
-use std::{mem, time::Duration};
+use std::time::Duration;
 
-use async_trait::async_trait;
 use kanal::{unbounded_async, bounded_async};
 use rdkafka::{producer::{FutureProducer, Producer}, ClientConfig, error::KafkaError};
 use tokio::{runtime::Builder, select, signal, task::JoinSet};
@@ -9,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use ustr::ustr;
 use utilities::{env_var::{EnvVars, self}, logger::{error,info}};
 
-use crate::{Task, statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::DispatcherTask, sender::KafkaPacketSender};
+use crate::{statistics::StatisticsTask, receiver::ReceiverTask, dispatcher::DispatcherTask, sender::KafkaPacketSender};
 use crate::{PartitionStrategies::{*, self}, CheckpointStrategies};
 
 #[derive(Default)]
@@ -52,7 +51,7 @@ impl ServerManagerTask {
         
     }
     
-    pub fn start(&mut self) ->Result<(),String> {
+    pub fn start(self) ->Result<(),String> {
         let worker_threads = self.vars.as_ref().unwrap().worker_threads;
         let mut rt_builder = Builder::new_multi_thread();
         if worker_threads > 0 {
@@ -126,11 +125,7 @@ impl ServerManagerTask {
         }
     }
 
-}
-
-#[async_trait]
-impl Task for ServerManagerTask {
-    async fn run(&mut self) {
+    async fn run(self) {
         let vars = self.vars.as_ref().unwrap();
 
         if self.producer.is_none()  {
@@ -138,7 +133,7 @@ impl Task for ServerManagerTask {
             return;
         }
 
-        let producer = mem::take(&mut self.producer).unwrap();
+        let producer = self.producer.clone().unwrap();
 
         //Define shutdown token
         let shutdown_token = CancellationToken::new();
@@ -161,13 +156,13 @@ impl Task for ServerManagerTask {
             stats_tx);
         
         //Istantiate tasks
-        let mut stat_task = StatisticsTask::new(vars, shutdown_token.clone(),stats_rx);
-        let mut receiver_task = ReceiverTask::new( 
+        let stat_task = StatisticsTask::new(vars, shutdown_token.clone(),stats_rx);
+        let receiver_task = ReceiverTask::new( 
             dispatcher_tx,
             shutdown_token.clone(), 
             vars);
             
-        let mut dispatcher_task = DispatcherTask::new(
+        let dispatcher_task = DispatcherTask::new(
             shutdown_token.clone(),
             dispatcher_rx,
             (checkpoint_strategy, partition_strategy),
@@ -175,9 +170,9 @@ impl Task for ServerManagerTask {
 
         //Schedule tasks
         let mut set = JoinSet::new();
-        set.spawn(async move {stat_task.run().await});
-        set.spawn(async move {dispatcher_task.run().await});
-        set.spawn(async move {receiver_task.run().await});
+        set.spawn(async move {stat_task.await});
+        set.spawn(async move {dispatcher_task.await});
+        set.spawn(async move {receiver_task.await});
       
         //Handle CTRL-C signal
         select! {
@@ -195,4 +190,5 @@ impl Task for ServerManagerTask {
         }
         info!("Bye Bye");
     }
+
 }

@@ -1,10 +1,11 @@
-use async_trait::async_trait;
+use std::{future::{IntoFuture, Future}, pin::Pin};
+
 use kanal::AsyncReceiver;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
 use utilities::logger::*;
 
-use crate::{Task, DataPacket, CheckpointStrategy, PartitionStrategy, PartitionStrategies, CheckpointStrategies, Strategies, sender::KafkaPacketSender};
+use crate::{DataPacket, CheckpointStrategy, PartitionStrategy, PartitionStrategies, CheckpointStrategies, Strategies, sender::KafkaPacketSender};
 
 pub struct DispatcherTask {
     shutdown_token: CancellationToken,
@@ -36,11 +37,8 @@ impl DispatcherTask {
         }
         self.kafka_sender.send_to_kafka(packet, partition);
     }
-}
 
-#[async_trait]
-impl Task for DispatcherTask {
-    async fn run(&mut self) {
+    async fn run(mut self) {
         loop {
            select! {
                 _ = self.shutdown_token.cancelled() => { 
@@ -50,10 +48,19 @@ impl Task for DispatcherTask {
 
                 data = self.dispatcher_receiver.recv() => {
                     if let Ok(pkt) = data  {
-                        DispatcherTask::dispatch_packet(self, pkt).await;
+                        DispatcherTask::dispatch_packet(&mut self, pkt).await;
                     }
                 }
            }
         }
+    }
+}
+
+impl IntoFuture for DispatcherTask {
+    type Output = ();
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.run())
     }
 }

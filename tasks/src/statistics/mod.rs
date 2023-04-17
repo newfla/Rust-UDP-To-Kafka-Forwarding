@@ -1,4 +1,4 @@
-use async_trait::async_trait;
+use std::{future::{IntoFuture, Future}, pin::Pin};
 
 use coarsetime::{Instant, Duration};
 use derive_new::new;
@@ -7,7 +7,7 @@ use tokio::{time::interval_at, select};
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars, statistics::{Stats,StatsHolder}};
 
-use crate::{Task, DataTransmitted};
+use crate::DataTransmitted;
 
 #[derive(new)]
 pub struct StatisticData {
@@ -31,11 +31,8 @@ impl StatisticsTask {
         
         Self {timeout, holder,stats_rx, shutdown_token}
     }
-}
 
-#[async_trait]
-impl Task for StatisticsTask {
-    async fn run(&mut self) {
+    async fn run(mut self) {
         //Arm the timer to produce statistics at regular intervals
         let start = tokio::time::Instant::now() + self.timeout.into();
         let mut timer = interval_at(start, self.timeout.into());
@@ -63,5 +60,14 @@ impl Task for StatisticsTask {
                 }
             }
         }
+    }
+}
+
+impl IntoFuture for StatisticsTask {
+    type Output = ();
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.run())
     }
 }

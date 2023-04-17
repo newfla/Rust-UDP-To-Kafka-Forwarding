@@ -1,6 +1,5 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, future::{IntoFuture, Future}, pin::Pin};
 
-use async_trait::async_trait;
 use branches::unlikely;
 use coarsetime::Instant;
 use kanal::AsyncSender;
@@ -10,7 +9,7 @@ use utilities::{logger::*, env_var::EnvVars};
 use tokio_dtls_stream_sink::{Server, Session};
 use openssl::ssl::{SslContext, SslFiletype, SslMethod};
 
-use crate::{Task, DataPacket};
+use crate::DataPacket;
 
 #[derive(Clone)]
 pub struct ReceiverTask {
@@ -35,14 +34,14 @@ impl ReceiverTask {
         (ip + ":" +&port).parse().unwrap()
     }
 
-    async fn error_run(&mut self){
+    async fn error_run(&self){
         error!("Key AND/OR Certificate for TLS were not provided");
         debug!("Certificate: {:?}", self.dtls_settings.1);
         debug!("Key: {:?}", self.dtls_settings.2);
         self.shutdown_token.cancel();
     }
 
-    async fn plain_run(&mut self, socket:UdpSocket){
+    async fn plain_run(&self, socket:UdpSocket){
 
         //Handle incoming UDP packets 
         //We don't need to check shutdown_token.cancelled() using select!. Infact, dispatcher_sender.send().is_err() <=> shutdown_token.cancelled() 
@@ -71,7 +70,7 @@ impl ReceiverTask {
         }
     }
 
-    async fn dtls_run(&mut self, socket:UdpSocket, cert:String, key:String){
+    async fn dtls_run(&self, socket:UdpSocket, cert:String, key:String){
         let mut server = Server::new(socket);
         match Self::build_ssl_context(cert,key) {
             Err(_) => {
@@ -96,7 +95,7 @@ impl ReceiverTask {
         } 
     }
 
-    fn handle_dtls_session(&mut self, mut session:Session){
+    fn handle_dtls_session(&self, mut session:Session){
         let dispatcher_sender= self.dispatcher_sender.clone();
         let shutdown_token= self.shutdown_token.clone();
 
@@ -142,11 +141,8 @@ impl ReceiverTask {
             }
         }
     }
-}
 
-#[async_trait]
-impl Task for ReceiverTask {
-    async fn run(&mut self) {
+    async fn run(self) {
         //Socket binding handling 
         let socket = UdpSocket::bind(self.addr).await;
         if let Err(err) = socket {
@@ -161,5 +157,14 @@ impl Task for ReceiverTask {
             (true, Some(cert), Some(key)) => self.dtls_run(socket, cert.to_owned(), key.to_owned()).await,
             (true,_,_) =>self.error_run().await
         }
+    }
+}
+
+impl IntoFuture for ReceiverTask {
+    type Output = ();
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(self.run())
     }
 }

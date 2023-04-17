@@ -1,7 +1,6 @@
 use std::{net::SocketAddr, sync::{Arc, atomic::{AtomicI32, Ordering}}};
 use cached::proc_macro::cached;
 use fastrand::Rng;
-use async_trait::async_trait;
 use statistics::StatisticData;
 use tokio::sync::Notify;
 use ustr::{ustr, Ustr};
@@ -21,13 +20,8 @@ type Ticket = Arc<Notify>;
 type Strategies = (CheckpointStrategies, PartitionStrategies);
 type DataTransmitted = Option<StatisticData>;
 
-#[async_trait]
-pub trait Task {
-    async fn run(&mut self);
-}
-
 pub trait PartitionStrategy {
-    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails;
+    fn partition(&self, addr: &SocketAddr) -> PartitionDetails;
 }
 
 #[derive(new)]
@@ -39,7 +33,7 @@ pub enum PartitionStrategies {
 }
 
 impl PartitionStrategy for PartitionStrategies {
-    fn partition(&mut self, addr: &SocketAddr) -> PartitionDetails {
+    fn partition(&self, addr: &SocketAddr) -> PartitionDetails {
         match self {
             PartitionStrategies::NonePartition => none_partition(addr),
             PartitionStrategies::RandomPartition { rng, num_partitions } => random_partition(addr, *num_partitions, rng),
