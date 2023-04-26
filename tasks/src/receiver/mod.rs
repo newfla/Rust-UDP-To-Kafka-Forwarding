@@ -3,7 +3,7 @@ use std::{net::SocketAddr, future::{IntoFuture, Future}, pin::Pin};
 use branches::unlikely;
 use coarsetime::Instant;
 use kanal::AsyncSender;
-use tokio::{net::UdpSocket, select, spawn, io};
+use tokio::{net::UdpSocket, select, spawn};
 use tokio_util::sync::CancellationToken;
 use utilities::{logger::*, env_var::EnvVars};
 use tokio_dtls_stream_sink::{Server, Session};
@@ -42,17 +42,11 @@ impl ReceiverTask {
     }
 
     async fn plain_run(&self, socket:UdpSocket){
-
         //Handle incoming UDP packets 
         //We don't need to check shutdown_token.cancelled() using select!. Infact, dispatcher_sender.send().is_err() <=> shutdown_token.cancelled() 
         loop {
             let mut buf  = Vec::with_capacity(self.buffer_size);
-            let _ = socket.readable().await;
-
-            match socket.try_recv_buf_from(&mut buf) {
-                Err(ref e) if unlikely(e.kind() == io::ErrorKind::WouldBlock) => {
-                    continue;
-                },
+            match socket.recv_buf_from(&mut buf).await {
                 Err(err) => {
                     error!("Socket recv failed. Reason: {}", err);
                     self.shutdown_token.cancel();
