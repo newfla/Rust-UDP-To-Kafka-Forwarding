@@ -1,3 +1,7 @@
+# DEPRECATION NOTICE
+
+See to [crab-kafka udp example](https://github.com/newfla/crab-kafka/tree/main/examples/udp_to_kafka) with <TCP|UDP> + TLS support.
+
 # Rust-UDP-To-Kafka-Forwarding
 
 A simple UDP and DTLS async server based on [Tokio framework](https://https://tokio.rs) that forwards packets to [Apache Kafka](https://kafka.apache.org/).
