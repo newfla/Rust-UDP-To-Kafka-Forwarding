@@ -52,4 +52,4 @@ __'\*'__: only available when _KAFKA_PARTITION_STRATEGY_ is set to _RANDOM, ROUN
  - **FLIP_COIN**: leave it to chance
 
 ## Example
-Check the complete example involving a client, the broker and a kafka consumer [here]()
+Check the complete example involving a client, the broker and a kafka consumer [here](https://github.com/newfla/Rust-UDP-To-Kafka-Example)
